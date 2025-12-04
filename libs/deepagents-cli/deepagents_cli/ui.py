@@ -56,7 +56,7 @@ def format_tool_display(tool_name: str, tool_args: dict) -> str:
                 # Use relative if it's shorter and not too long
                 if len(rel_str) < len(path_str) and len(rel_str) <= max_length:
                     return rel_str
-            except (ValueError, Exception):
+            except (ValueError, TypeError, AttributeError):
                 pass
 
             # If absolute path is reasonable length, use it
@@ -65,7 +65,7 @@ def format_tool_display(tool_name: str, tool_args: dict) -> str:
 
             # Otherwise, just show basename (filename only)
             return path.name
-        except Exception:
+        except (ValueError, OSError):
             # Fallback to original string if any error
             return truncate_value(path_str, max_length)
 

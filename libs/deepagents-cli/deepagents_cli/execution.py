@@ -200,7 +200,7 @@ async def execute_task(
                 context_parts.append(
                     f"\n### {file_path.name}\nPath: `{file_path}`\n```\n{content}\n```"
                 )
-            except Exception as e:
+            except (OSError, UnicodeDecodeError) as e:
                 context_parts.append(f"\n### {file_path.name}\n[Error reading file: {e}]")
 
         final_input = "\n".join(context_parts)
