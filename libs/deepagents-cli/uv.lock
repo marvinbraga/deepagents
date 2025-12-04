@@ -703,10 +703,10 @@ dependencies = [
     { name = "deepagents" },
     { name = "langchain" },
     { name = "langchain-openai" },
+    { name = "langchain-xai" },
     { name = "markdownify" },
     { name = "modal" },
     { name = "prompt-toolkit" },
-    { name = "pygame" },
     { name = "python-dotenv" },
     { name = "requests" },
     { name = "rich" },
@@ -729,6 +729,9 @@ lint = [
     { name = "mypy" },
     { name = "ruff" },
 ]
+play = [
+    { name = "pygame" },
+]
 test = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -746,10 +749,10 @@ requires-dist = [
     { name = "deepagents", directory = "../deepagents" },
     { name = "langchain", specifier = ">=1.0.7" },
     { name = "langchain-openai", specifier = ">=0.1.0" },
+    { name = "langchain-xai", specifier = ">=1.0.0" },
     { name = "markdownify", specifier = ">=0.13.0" },
     { name = "modal", specifier = ">=0.65.0" },
     { name = "prompt-toolkit", specifier = ">=3.0.52" },
-    { name = "pygame", specifier = ">=2.6.1" },
     { name = "python-dotenv" },
     { name = "requests" },
     { name = "rich", specifier = ">=13.0.0" },
@@ -772,6 +775,7 @@ lint = [
     { name = "mypy" },
     { name = "ruff" },
 ]
+play = [{ name = "pygame", specifier = ">=2.6.1" }]
 test = [
     { name = "pytest", specifier = ">=8.3.4" },
     { name = "pytest-asyncio", specifier = ">=0.25.3" },
@@ -1290,6 +1294,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/b3/3c/edb7ffca76fdcfd938ce8380bf8ec79a0a8be41ba7fdbf6f9fe1cb5fd1a8/langchain_openai-1.0.2.tar.gz", hash = "sha256:621e8295c52db9a1fc74806a0bd227ea215c132c6c5e421d2982c9ee78468769", size = 1025578, upload-time = "2025-11-03T14:08:32.121Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/78/9b/7af1d539a051d195c5ecc5990ebd483f208c40f75a8a9532846d16762704/langchain_openai-1.0.2-py3-none-any.whl", hash = "sha256:b3eb9b82752063b46452aa868d8c8bc1604e57631648c3bc325bba58d3aeb143", size = 81934, upload-time = "2025-11-03T14:08:30.655Z" },
+]
+
+[[package]]
+name = "langchain-xai"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aiohttp" },
+    { name = "langchain-core" },
+    { name = "langchain-openai" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d8/44/fb44d72db8f407bf1bbf8ed4f9a8c1dd06a9833038da64aecd0564ab6a23/langchain_xai-1.0.0.tar.gz", hash = "sha256:b21f14400b8e288f876375a8f71e53b705cbce78129c01fe69d2b09c24a80181", size = 168145, upload-time = "2025-10-17T21:48:09.414Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/76/a9/1120a84264cf1d929e5b4c674d8002614d2d35940d834fb3613212c4e441/langchain_xai-1.0.0-py3-none-any.whl", hash = "sha256:d9961a14eb3038f52e1f64084829f01e154c79ae20db5c5669338efd219a5c59", size = 9184, upload-time = "2025-10-17T21:48:08.582Z" },
 ]
 
 [[package]]

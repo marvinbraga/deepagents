@@ -45,6 +45,10 @@ COMMANDS = {
     "clear": "Clear screen and reset conversation",
     "help": "Show help information",
     "tokens": "Show token usage for current session",
+    "plan": "Show current plan (if in plan mode)",
+    "approve": "Approve the current plan",
+    "reject": "Reject the current plan",
+    "plan-status": "Show detailed plan status",
     "quit": "Exit the CLI",
     "exit": "Exit the CLI",
 }

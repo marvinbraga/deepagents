@@ -6,7 +6,11 @@ from pathlib import Path
 from langgraph.checkpoint.memory import InMemorySaver
 
 from .config import COLORS, DEEP_AGENTS_ASCII, console
+from .plan.commands import register_plan_commands
 from .ui import TokenTracker, show_interactive_help
+
+# Register plan commands
+PLAN_COMMANDS = register_plan_commands()
 
 
 def handle_command(command: str, agent, token_tracker: TokenTracker) -> str | bool:
@@ -41,13 +45,16 @@ def handle_command(command: str, agent, token_tracker: TokenTracker) -> str | bo
         token_tracker.display_session()
         return True
 
+    # Check plan commands
+    if cmd in PLAN_COMMANDS:
+        handler = PLAN_COMMANDS[cmd]
+        return handler(agent, console)
+
     console.print()
     console.print(f"[yellow]Unknown command: /{cmd}[/yellow]")
     console.print("[dim]Type /help for available commands.[/dim]")
     console.print()
     return True
-
-    return False
 
 
 def execute_bash_command(command: str) -> bool:

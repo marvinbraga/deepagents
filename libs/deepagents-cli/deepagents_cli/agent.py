@@ -1,5 +1,6 @@
 """Agent management and creation for the CLI."""
 
+import logging
 import os
 import shutil
 from pathlib import Path
@@ -24,6 +25,8 @@ from deepagents_cli.config import COLORS, config, console, get_default_coding_in
 from deepagents_cli.integrations.sandbox_factory import get_default_working_dir
 from deepagents_cli.shell import ShellMiddleware
 from deepagents_cli.skills import SkillsMiddleware
+
+logger = logging.getLogger(__name__)
 
 
 def list_agents() -> None:
@@ -408,6 +411,194 @@ def create_agent_with_config(
         model=model,
         system_prompt=system_prompt,
         tools=tools,
+        backend=composite_backend,
+        middleware=agent_middleware,
+        interrupt_on=interrupt_on,
+    ).with_config(config)
+
+    agent.checkpointer = InMemorySaver()
+
+    return agent, composite_backend
+
+
+async def create_agent_with_all_features(
+    model: str | BaseChatModel,
+    assistant_id: str,
+    tools: list[BaseTool],
+    *,
+    sandbox: SandboxBackendProtocol | None = None,
+    sandbox_type: str | None = None,
+    enable_mcp: bool = True,
+    enable_hooks: bool = True,
+    enable_plan_mode: bool = True,
+) -> tuple[Pregel, CompositeBackend]:
+    """Create an agent with MCP, Hooks, and Plan Mode features enabled.
+
+    This is an enhanced version of create_agent_with_config that includes:
+    - MCP middleware for Model Context Protocol servers
+    - Hooks middleware for tool call validation and logging
+    - Plan Mode middleware for structured planning workflow
+
+    Args:
+        model: LLM model to use
+        assistant_id: Agent identifier for memory storage
+        tools: Additional tools to provide to agent
+        sandbox: Optional sandbox backend for remote execution
+        sandbox_type: Type of sandbox provider ("modal", "runloop", "daytona")
+        enable_mcp: Whether to enable MCP middleware (default: True)
+        enable_hooks: Whether to enable Hooks middleware (default: True)
+        enable_plan_mode: Whether to enable Plan Mode middleware (default: True)
+
+    Returns:
+        2-tuple of graph and backend
+
+    Example:
+        ```python
+        from deepagents_cli.agent import create_agent_with_all_features
+        from deepagents_cli.models import create_model
+
+        model = create_model()
+        agent, backend = await create_agent_with_all_features(
+            model=model,
+            assistant_id="my-agent",
+            tools=[],
+            enable_mcp=True,
+            enable_hooks=True,
+            enable_plan_mode=True,
+        )
+        ```
+    """
+    # Setup agent directory for persistent memory
+    agent_dir = settings.ensure_agent_dir(assistant_id)
+    agent_md = agent_dir / "agent.md"
+    if not agent_md.exists():
+        source_content = get_default_coding_instructions()
+        agent_md.write_text(source_content)
+
+    # Skills directory - per-agent (user-level)
+    skills_dir = settings.ensure_user_skills_dir(assistant_id)
+
+    # Project-level skills directory (if in a project)
+    project_skills_dir = settings.get_project_skills_dir()
+
+    # Import middleware classes (done inside function to avoid circular imports)
+    from deepagents.middleware.hooks import HooksMiddleware
+    from deepagents.middleware.mcp import MCPMiddleware
+    from deepagents.middleware.plan_mode import PlanModeMiddleware
+
+    # Initialize MCP middleware if enabled
+    mcp_middleware = None
+    if enable_mcp:
+        try:
+            from deepagents_cli.mcp import load_mcp_config
+
+            mcp_configs = load_mcp_config()
+            if mcp_configs:
+                mcp_middleware = MCPMiddleware(servers=mcp_configs, auto_connect=True)
+                await mcp_middleware.initialize()
+                logger.info("MCP middleware initialized with %d servers", len(mcp_configs))
+            else:
+                logger.debug("No MCP servers configured")
+        except Exception as e:
+            logger.warning("Failed to initialize MCP middleware: %s", e)
+
+    # Initialize Hooks middleware if enabled
+    hooks_middleware = None
+    if enable_hooks:
+        try:
+            from deepagents_cli.hooks import load_hooks_config
+
+            hooks_registry = load_hooks_config(settings)
+            hooks_middleware = HooksMiddleware(registry=hooks_registry, assistant_id=assistant_id)
+            logger.info("Hooks middleware initialized")
+        except Exception as e:
+            logger.warning("Failed to initialize Hooks middleware: %s", e)
+
+    # Initialize Plan Mode middleware if enabled
+    plan_mode_middleware = None
+    if enable_plan_mode:
+        try:
+            plan_mode_middleware = PlanModeMiddleware()
+            logger.info("Plan Mode middleware initialized")
+        except Exception as e:
+            logger.warning("Failed to initialize Plan Mode middleware: %s", e)
+
+    # CONDITIONAL SETUP: Local vs Remote Sandbox
+    if sandbox is None:
+        # ========== LOCAL MODE ==========
+        composite_backend = CompositeBackend(
+            default=FilesystemBackend(),
+            routes={},
+        )
+
+        # Build middleware list with new features
+        agent_middleware = [
+            AgentMemoryMiddleware(settings=settings, assistant_id=assistant_id),
+            SkillsMiddleware(
+                skills_dir=skills_dir,
+                assistant_id=assistant_id,
+                project_skills_dir=project_skills_dir,
+            ),
+            ShellMiddleware(
+                workspace_root=str(Path.cwd()),
+                env=os.environ,
+            ),
+        ]
+    else:
+        # ========== REMOTE SANDBOX MODE ==========
+        composite_backend = CompositeBackend(
+            default=sandbox,
+            routes={},
+        )
+
+        # Build middleware list (no shell middleware for remote)
+        agent_middleware = [
+            AgentMemoryMiddleware(settings=settings, assistant_id=assistant_id),
+            SkillsMiddleware(
+                skills_dir=skills_dir,
+                assistant_id=assistant_id,
+                project_skills_dir=project_skills_dir,
+            ),
+        ]
+
+    # Add optional middleware
+    if hooks_middleware:
+        agent_middleware.append(hooks_middleware)
+
+    if plan_mode_middleware:
+        agent_middleware.append(plan_mode_middleware)
+
+    if mcp_middleware:
+        agent_middleware.append(mcp_middleware)
+
+    # Get the system prompt
+    system_prompt = get_system_prompt(assistant_id=assistant_id, sandbox_type=sandbox_type)
+
+    # Add MCP system prompt if available
+    if mcp_middleware:
+        mcp_prompt = mcp_middleware.get_system_prompt_addition()
+        if mcp_prompt:
+            system_prompt = f"{system_prompt}\n\n{mcp_prompt}"
+
+    # Collect all tools (base tools + MCP tools + plan mode tools)
+    all_tools = list(tools)
+
+    if mcp_middleware:
+        mcp_tools = mcp_middleware.get_tools()
+        all_tools.extend(mcp_tools)
+        logger.info("Added %d MCP tools", len(mcp_tools))
+
+    if plan_mode_middleware:
+        plan_tools = plan_mode_middleware.get_tools()
+        all_tools.extend(plan_tools)
+        logger.info("Added %d Plan Mode tools", len(plan_tools))
+
+    interrupt_on = _add_interrupt_on()
+
+    agent = create_deep_agent(
+        model=model,
+        system_prompt=system_prompt,
+        tools=all_tools,
         backend=composite_backend,
         middleware=agent_middleware,
         interrupt_on=interrupt_on,
