@@ -1,5 +1,6 @@
 """Custom tools for the CLI agent."""
 
+import json
 from typing import Any, Literal
 
 import requests
@@ -50,7 +51,7 @@ def http_request(
 
         try:
             content = response.json()
-        except:
+        except (json.JSONDecodeError, ValueError):
             content = response.text
 
         return {
