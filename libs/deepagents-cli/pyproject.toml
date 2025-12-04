@@ -25,6 +25,10 @@ deepagents = "deepagents_cli:cli_main"
 deepagents-cli = "deepagents_cli:cli_main"
 
 [dependency-groups]
+play = [
+  "pygame>=2.6.1",
+]
+
 test = [
     "pytest>=8.3.4",
     "pytest-asyncio>=0.25.3",
