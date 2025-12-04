@@ -363,49 +363,20 @@ def get_default_coding_instructions() -> str:
 def create_model() -> BaseChatModel:
     """Create the appropriate model based on available API keys.
 
-    Uses the global settings instance to determine which model to create.
+    This is a compatibility wrapper that delegates to the new models module.
+    New code should use:
+        from deepagents_cli.models import create_model
 
     Returns:
-        ChatModel instance (OpenAI or Anthropic)
+        ChatModel instance
 
     Raises:
-        SystemExit if no API key is configured
+        RuntimeError if no API key is configured
     """
-    if settings.has_openai:
-        from langchain_openai import ChatOpenAI
+    from deepagents_cli.models import create_model as _create_model
 
-        model_name = os.environ.get("OPENAI_MODEL", "gpt-5-mini")
-        console.print(f"[dim]Using OpenAI model: {model_name}[/dim]")
-        return ChatOpenAI(
-            model=model_name,
-        )
-    if settings.has_anthropic:
-        from langchain_anthropic import ChatAnthropic
-
-        model_name = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929")
-        console.print(f"[dim]Using Anthropic model: {model_name}[/dim]")
-        return ChatAnthropic(
-            model_name=model_name,
-            # The attribute exists, but it has a Pydantic alias which
-            # causes issues in IDEs/type checkers.
-            max_tokens=20_000,  # type: ignore[arg-type]
-        )
-    if settings.has_google:
-        from langchain_google_genai import ChatGoogleGenerativeAI
-
-        model_name = os.environ.get("GOOGLE_MODEL", "gemini-3-pro-preview")
-        console.print(f"[dim]Using Google Gemini model: {model_name}[/dim]")
-        return ChatGoogleGenerativeAI(
-            model=model_name,
-            temperature=0,
-            max_tokens=None,
-        )
-    console.print("[bold red]Error:[/bold red] No API key configured.")
-    console.print("\nPlease set one of the following environment variables:")
-    console.print("  - OPENAI_API_KEY     (for OpenAI models like gpt-5-mini)")
-    console.print("  - ANTHROPIC_API_KEY  (for Claude models)")
-    console.print("  - GOOGLE_API_KEY     (for Google Gemini models)")
-    console.print("\nExample:")
-    console.print("  export OPENAI_API_KEY=your_api_key_here")
-    console.print("\nOr add it to your .env file.")
-    sys.exit(1)
+    try:
+        return _create_model()
+    except RuntimeError as e:
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        sys.exit(1)
