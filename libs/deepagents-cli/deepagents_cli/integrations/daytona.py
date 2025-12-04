@@ -11,6 +11,8 @@ from deepagents.backends.protocol import (
 )
 from deepagents.backends.sandbox import BaseSandbox
 
+from deepagents_cli.integrations.error_codes import map_error_to_code
+
 if TYPE_CHECKING:
     from daytona import Sandbox
 
@@ -69,9 +71,6 @@ class DaytonaBackend(BaseSandbox):
         Returns:
             List of FileDownloadResponse objects, one per input path.
             Response order matches input order.
-
-        TODO: Map Daytona API error strings to standardized FileOperationError codes.
-        Currently only implements happy path.
         """
         from daytona import FileDownloadRequest
 
@@ -79,16 +78,21 @@ class DaytonaBackend(BaseSandbox):
         download_requests = [FileDownloadRequest(source=path) for path in paths]
         daytona_responses = self._sandbox.fs.download_files(download_requests)
 
-        # Convert Daytona results to our response format
-        # TODO: Map resp.error to standardized error codes when available
-        return [
-            FileDownloadResponse(
-                path=resp.source,
-                content=resp.result,
-                error=None,  # TODO: map resp.error to FileOperationError
+        # Convert Daytona results to our response format with error code mapping
+        responses = []
+        for resp in daytona_responses:
+            error = None
+            if resp.error:
+                error_code = map_error_to_code(resp.error)
+                error = f"{error_code.name if error_code else 'UNKNOWN'}: {resp.error}"
+            responses.append(
+                FileDownloadResponse(
+                    path=resp.source,
+                    content=resp.result if resp.result else b"",
+                    error=error,
+                )
             )
-            for resp in daytona_responses
-        ]
+        return responses
 
     def upload_files(self, files: list[tuple[str, bytes]]) -> list[FileUploadResponse]:
         """Upload multiple files to the Daytona sandbox.
@@ -103,15 +107,19 @@ class DaytonaBackend(BaseSandbox):
         Returns:
             List of FileUploadResponse objects, one per input file.
             Response order matches input order.
-
-        TODO: Map Daytona API error strings to standardized FileOperationError codes.
-        Currently only implements happy path.
         """
         from daytona import FileUpload
 
         # Create batch upload request using Daytona's native batch API
         upload_requests = [FileUpload(source=content, destination=path) for path, content in files]
-        self._sandbox.fs.upload_files(upload_requests)
+        upload_responses = self._sandbox.fs.upload_files(upload_requests)
 
-        # TODO: Check if Daytona returns error info and map to FileOperationError codes
-        return [FileUploadResponse(path=path, error=None) for path, _ in files]
+        # Map Daytona responses with error code handling
+        responses = []
+        for upload_resp, (path, _) in zip(upload_responses, files):
+            error = None
+            if hasattr(upload_resp, "error") and upload_resp.error:
+                error_code = map_error_to_code(upload_resp.error)
+                error = f"{error_code.name if error_code else 'UNKNOWN'}: {upload_resp.error}"
+            responses.append(FileUploadResponse(path=path, error=error))
+        return responses

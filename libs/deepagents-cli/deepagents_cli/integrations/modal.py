@@ -11,6 +11,8 @@ from deepagents.backends.protocol import (
 )
 from deepagents.backends.sandbox import BaseSandbox
 
+from deepagents_cli.integrations.error_codes import map_error_to_code
+
 if TYPE_CHECKING:
     import modal
 
@@ -81,10 +83,6 @@ class ModalBackend(BaseSandbox):
         Returns:
             List of FileDownloadResponse objects, one per input path.
             Response order matches input order.
-
-        TODO: Implement proper error handling with standardized FileOperationError codes.
-        Need to determine what exceptions Modal's sandbox.open() actually raises.
-        Currently only implements happy path.
         """
         # This implementation relies on the Modal sandbox file API.
         # https://modal.com/doc/guide/sandbox-files
@@ -92,9 +90,20 @@ class ModalBackend(BaseSandbox):
         # We're OK using it here as it's targeting the CLI application.
         responses = []
         for path in paths:
-            with self._sandbox.open(path, "rb") as f:
-                content = f.read()
-            responses.append(FileDownloadResponse(path=path, content=content, error=None))
+            try:
+                with self._sandbox.open(path, "rb") as f:
+                    content = f.read()
+                responses.append(FileDownloadResponse(path=path, content=content, error=None))
+            except Exception as e:
+                error_msg = str(e)
+                error_code = map_error_to_code(error_msg)
+                responses.append(
+                    FileDownloadResponse(
+                        path=path,
+                        content=b"",
+                        error=f"{error_code.name if error_code else 'UNKNOWN'}: {error_msg}",
+                    )
+                )
         return responses
 
     def upload_files(self, files: list[tuple[str, bytes]]) -> list[FileUploadResponse]:
@@ -109,10 +118,6 @@ class ModalBackend(BaseSandbox):
         Returns:
             List of FileUploadResponse objects, one per input file.
             Response order matches input order.
-
-        TODO: Implement proper error handling with standardized FileOperationError codes.
-        Need to determine what exceptions Modal's sandbox.open() actually raises.
-        Currently only implements happy path.
         """
         # This implementation relies on the Modal sandbox file API.
         # https://modal.com/doc/guide/sandbox-files
@@ -120,7 +125,17 @@ class ModalBackend(BaseSandbox):
         # We're OK using it here as it's targeting the CLI application.
         responses = []
         for path, content in files:
-            with self._sandbox.open(path, "wb") as f:
-                f.write(content)
-            responses.append(FileUploadResponse(path=path, error=None))
+            try:
+                with self._sandbox.open(path, "wb") as f:
+                    f.write(content)
+                responses.append(FileUploadResponse(path=path, error=None))
+            except Exception as e:
+                error_msg = str(e)
+                error_code = map_error_to_code(error_msg)
+                responses.append(
+                    FileUploadResponse(
+                        path=path,
+                        error=f"{error_code.name if error_code else 'UNKNOWN'}: {error_msg}",
+                    )
+                )
         return responses

@@ -15,6 +15,8 @@ from deepagents.backends.protocol import ExecuteResponse, FileDownloadResponse, 
 from deepagents.backends.sandbox import BaseSandbox
 from runloop_api_client import Runloop
 
+from deepagents_cli.integrations.error_codes import map_error_to_code
+
 
 class RunloopBackend(BaseSandbox):
     """Backend that operates on files in a Runloop devbox.
@@ -92,16 +94,24 @@ class RunloopBackend(BaseSandbox):
         Downloads files individually using the Runloop API. Returns a list of
         FileDownloadResponse objects preserving order and reporting per-file
         errors rather than raising exceptions.
-
-        TODO: Implement proper error handling with standardized FileOperationError codes.
-        Currently only implements happy path.
         """
         responses: list[FileDownloadResponse] = []
         for path in paths:
-            # devboxes.download_file returns a BinaryAPIResponse which exposes .read()
-            resp = self._client.devboxes.download_file(self._devbox_id, path=path)
-            content = resp.read()
-            responses.append(FileDownloadResponse(path=path, content=content, error=None))
+            try:
+                # devboxes.download_file returns a BinaryAPIResponse which exposes .read()
+                resp = self._client.devboxes.download_file(self._devbox_id, path=path)
+                content = resp.read()
+                responses.append(FileDownloadResponse(path=path, content=content, error=None))
+            except Exception as e:
+                error_msg = str(e)
+                error_code = map_error_to_code(error_msg)
+                responses.append(
+                    FileDownloadResponse(
+                        path=path,
+                        content=b"",
+                        error=f"{error_code.name if error_code else 'UNKNOWN'}: {error_msg}",
+                    )
+                )
 
         return responses
 
@@ -111,14 +121,21 @@ class RunloopBackend(BaseSandbox):
         Uploads files individually using the Runloop API. Returns a list of
         FileUploadResponse objects preserving order and reporting per-file
         errors rather than raising exceptions.
-
-        TODO: Implement proper error handling with standardized FileOperationError codes.
-        Currently only implements happy path.
         """
         responses: list[FileUploadResponse] = []
         for path, content in files:
-            # The Runloop client expects 'file' as bytes or a file-like object
-            self._client.devboxes.upload_file(self._devbox_id, path=path, file=content)
-            responses.append(FileUploadResponse(path=path, error=None))
+            try:
+                # The Runloop client expects 'file' as bytes or a file-like object
+                self._client.devboxes.upload_file(self._devbox_id, path=path, file=content)
+                responses.append(FileUploadResponse(path=path, error=None))
+            except Exception as e:
+                error_msg = str(e)
+                error_code = map_error_to_code(error_msg)
+                responses.append(
+                    FileUploadResponse(
+                        path=path,
+                        error=f"{error_code.name if error_code else 'UNKNOWN'}: {error_msg}",
+                    )
+                )
 
         return responses
