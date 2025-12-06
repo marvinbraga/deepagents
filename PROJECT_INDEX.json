@@ -1,0 +1,223 @@
+{
+  "name": "deepagents",
+  "description": "General purpose 'deep agent' with sub-agent spawning, todo list capabilities, and mock file system. Built on LangGraph.",
+  "generated": "2025-12-06",
+  "python_version": ">=3.11",
+  "packages": [
+    {
+      "name": "deepagents",
+      "version": "0.2.8",
+      "path": "libs/deepagents/deepagents",
+      "description": "Core library for deep agents",
+      "entry_points": [
+        {
+          "file": "__init__.py",
+          "exports": ["create_deep_agent", "MCPClient", "MCPServerConfig", "FilesystemMiddleware", "HooksMiddleware", "MCPMiddleware", "SubAgent", "SubAgentMiddleware", "CompiledSubAgent"]
+        },
+        {
+          "file": "graph.py",
+          "functions": ["create_deep_agent", "get_default_model"]
+        }
+      ],
+      "modules": {
+        "middleware": {
+          "path": "middleware",
+          "files": [
+            {"file": "filesystem.py", "classes": ["FilesystemMiddleware"]},
+            {"file": "subagents.py", "classes": ["SubAgentMiddleware", "SubAgent", "CompiledSubAgent"]},
+            {"file": "plan_mode.py", "classes": ["PlanModeMiddleware"]},
+            {"file": "hooks.py", "classes": ["HooksMiddleware"]},
+            {"file": "mcp.py", "classes": ["MCPMiddleware"]},
+            {"file": "ultrathink.py", "classes": ["UltrathinkMiddleware", "UltrathinkState", "UltrathinkMiddlewareState"]},
+            {"file": "user_interaction.py", "classes": ["UserInteractionMiddleware", "UserQuestionRequest"]},
+            {"file": "patch_tool_calls.py", "classes": ["PatchToolCallsMiddleware"]}
+          ]
+        },
+        "backends": {
+          "path": "backends",
+          "files": [
+            {"file": "protocol.py", "classes": ["BackendProtocol", "BackendFactory", "SandboxBackendProtocol"]},
+            {"file": "state.py", "classes": ["StateBackend"]},
+            {"file": "filesystem.py", "classes": ["FilesystemBackend"]},
+            {"file": "store.py", "classes": ["StoreBackend"]},
+            {"file": "composite.py", "classes": ["CompositeBackend"]},
+            {"file": "sandbox.py", "classes": []},
+            {"file": "utils.py", "classes": []}
+          ]
+        },
+        "hooks": {
+          "path": "hooks",
+          "files": [
+            {"file": "types.py", "classes": ["Hook", "HookType", "HookResult"]},
+            {"file": "registry.py", "classes": ["HookRegistry"]},
+            {"file": "executor.py", "classes": ["HookExecutor"]}
+          ]
+        },
+        "mcp": {
+          "path": "mcp",
+          "files": [
+            {"file": "client.py", "classes": ["MCPClient"]},
+            {"file": "protocol.py", "classes": ["MCPServerConfig"]},
+            {"file": "tool_adapter.py", "classes": []},
+            {"file": "example.py", "classes": []}
+          ]
+        },
+        "plan": {
+          "path": "plan",
+          "files": [
+            {"file": "types.py", "classes": []}
+          ]
+        }
+      }
+    },
+    {
+      "name": "deepagents-cli",
+      "version": "0.0.10",
+      "path": "libs/deepagents-cli/deepagents_cli",
+      "description": "Interactive AI coding assistant CLI",
+      "entry_points": [
+        {
+          "file": "__init__.py",
+          "exports": ["cli_main"]
+        },
+        {
+          "file": "main.py",
+          "functions": ["cli_main"]
+        }
+      ],
+      "modules": {
+        "core": {
+          "path": ".",
+          "files": [
+            {"file": "agent.py", "purpose": "Agent configuration"},
+            {"file": "config.py", "purpose": "CLI configuration"},
+            {"file": "commands.py", "purpose": "CLI commands"},
+            {"file": "execution.py", "purpose": "Execution loop"},
+            {"file": "input.py", "purpose": "User input"},
+            {"file": "ui.py", "purpose": "Terminal UI"},
+            {"file": "tools.py", "purpose": "CLI tools"},
+            {"file": "shell.py", "purpose": "Shell execution"},
+            {"file": "file_ops.py", "purpose": "File operations"},
+            {"file": "project_utils.py", "purpose": "Project detection"},
+            {"file": "token_utils.py", "purpose": "Token counting"},
+            {"file": "agent_memory.py", "purpose": "Memory management"},
+            {"file": "user_interaction.py", "purpose": "User dialogs"}
+          ]
+        },
+        "models": {
+          "path": "models",
+          "files": [
+            {"file": "base.py", "purpose": "Base interface"},
+            {"file": "factory.py", "purpose": "Model factory"},
+            {"file": "registry.py", "purpose": "Model registry"},
+            {"file": "providers/anthropic.py", "purpose": "Anthropic provider"},
+            {"file": "providers/openai.py", "purpose": "OpenAI provider"},
+            {"file": "providers/google.py", "purpose": "Google provider"},
+            {"file": "providers/xai.py", "purpose": "xAI provider"}
+          ]
+        },
+        "integrations": {
+          "path": "integrations",
+          "files": [
+            {"file": "sandbox_factory.py", "purpose": "Sandbox factory"},
+            {"file": "daytona.py", "purpose": "Daytona integration"},
+            {"file": "modal.py", "purpose": "Modal integration"},
+            {"file": "runloop.py", "purpose": "Runloop integration"},
+            {"file": "error_codes.py", "purpose": "Error codes"}
+          ]
+        },
+        "hooks": {
+          "path": "hooks",
+          "files": [
+            {"file": "loader.py", "purpose": "Hook loader"},
+            {"file": "builtin/security.py", "purpose": "Security hooks"},
+            {"file": "builtin/logging.py", "purpose": "Logging hooks"}
+          ]
+        },
+        "skills": {
+          "path": "skills",
+          "files": [
+            {"file": "load.py", "purpose": "Skill loading"},
+            {"file": "commands.py", "purpose": "Skill commands"},
+            {"file": "middleware.py", "purpose": "Skill middleware"}
+          ]
+        },
+        "plan": {
+          "path": "plan",
+          "files": [
+            {"file": "ui.py", "purpose": "Planning UI"},
+            {"file": "commands.py", "purpose": "Planning commands"}
+          ]
+        },
+        "mcp": {
+          "path": "mcp",
+          "files": [
+            {"file": "loader.py", "purpose": "MCP loader"}
+          ]
+        }
+      }
+    },
+    {
+      "name": "deepagents-harbor",
+      "version": "0.0.1",
+      "path": "libs/harbor/deepagents_harbor",
+      "description": "Harbor integration with LangSmith tracing",
+      "modules": {
+        "core": {
+          "path": ".",
+          "files": [
+            {"file": "backend.py", "purpose": "Harbor backend"},
+            {"file": "tracing.py", "purpose": "LangSmith tracing"},
+            {"file": "deepagents_wrapper.py", "purpose": "DeepAgents wrapper"}
+          ]
+        }
+      }
+    }
+  ],
+  "builtin_tools": [
+    {"name": "write_todos", "middleware": "TodoListMiddleware", "description": "Create/manage task lists"},
+    {"name": "read_todos", "middleware": "TodoListMiddleware", "description": "Read current todo state"},
+    {"name": "ls", "middleware": "FilesystemMiddleware", "description": "List directory contents"},
+    {"name": "read_file", "middleware": "FilesystemMiddleware", "description": "Read file with pagination"},
+    {"name": "write_file", "middleware": "FilesystemMiddleware", "description": "Create/overwrite file"},
+    {"name": "edit_file", "middleware": "FilesystemMiddleware", "description": "String replacements"},
+    {"name": "glob", "middleware": "FilesystemMiddleware", "description": "Find files by pattern"},
+    {"name": "grep", "middleware": "FilesystemMiddleware", "description": "Search text patterns"},
+    {"name": "execute", "middleware": "FilesystemMiddleware", "description": "Run shell commands", "requires": "SandboxBackendProtocol"},
+    {"name": "task", "middleware": "SubAgentMiddleware", "description": "Delegate to sub-agents"},
+    {"name": "ask_user_question", "middleware": "UserInteractionMiddleware", "description": "Interactive questions"},
+    {"name": "confirm_action", "middleware": "UserInteractionMiddleware", "description": "Request confirmations"},
+    {"name": "enable_ultrathink", "middleware": "UltrathinkMiddleware", "description": "Enable extended thinking"},
+    {"name": "disable_ultrathink", "middleware": "UltrathinkMiddleware", "description": "Disable extended thinking"}
+  ],
+  "middleware_stack": [
+    {"name": "TodoListMiddleware", "purpose": "Task planning and progress tracking"},
+    {"name": "FilesystemMiddleware", "purpose": "File operations and context offloading"},
+    {"name": "SubAgentMiddleware", "purpose": "Delegate tasks to isolated sub-agents"},
+    {"name": "SummarizationMiddleware", "purpose": "Auto-summarizes when context exceeds limit"},
+    {"name": "AnthropicPromptCachingMiddleware", "purpose": "Caches system prompts"},
+    {"name": "PatchToolCallsMiddleware", "purpose": "Fixes dangling tool calls"},
+    {"name": "HumanInTheLoopMiddleware", "purpose": "Pauses for human approval"},
+    {"name": "UserInteractionMiddleware", "purpose": "Interactive user dialogs"},
+    {"name": "UltrathinkMiddleware", "purpose": "Extended thinking (Claude 4+)"}
+  ],
+  "tests": {
+    "deepagents": {
+      "path": "libs/deepagents/tests",
+      "unit_tests": "unit_tests/",
+      "integration_tests": "integration_tests/"
+    },
+    "deepagents-cli": {
+      "path": "libs/deepagents-cli/tests"
+    },
+    "harbor": {
+      "path": "libs/harbor/tests"
+    }
+  },
+  "documentation": [
+    {"path": "README.md", "description": "Main documentation"},
+    {"path": "docs/plans/", "description": "Implementation plans"},
+    {"path": "libs/deepagents/deepagents/mcp/README.md", "description": "MCP documentation"},
+    {"path": "libs/harbor/README.md", "description": "Harbor documentation"}
+  ]
+}

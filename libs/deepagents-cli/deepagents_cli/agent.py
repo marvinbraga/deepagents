@@ -333,6 +333,8 @@ def create_agent_with_config(
     *,
     sandbox: SandboxBackendProtocol | None = None,
     sandbox_type: str | None = None,
+    enable_ultrathink: bool = False,
+    ultrathink_budget: int = 10000,
 ) -> tuple[Pregel, CompositeBackend]:
     """Create and configure an agent with the specified model and tools.
 
@@ -343,6 +345,8 @@ def create_agent_with_config(
         sandbox: Optional sandbox backend for remote execution (e.g., ModalBackend).
                  If None, uses local filesystem + shell.
         sandbox_type: Type of sandbox provider ("modal", "runloop", "daytona")
+        enable_ultrathink: Whether to enable Ultrathink middleware (default: False)
+        ultrathink_budget: Token budget for extended thinking (default: 10000)
 
     Returns:
         2-tuple of graph and backend
@@ -405,12 +409,26 @@ def create_agent_with_config(
     # Get the system prompt (sandbox-aware and with skills)
     system_prompt = get_system_prompt(assistant_id=assistant_id, sandbox_type=sandbox_type)
 
+    # Add Ultrathink middleware if enabled
+    all_tools = list(tools)
+    if enable_ultrathink:
+        from deepagents.middleware.ultrathink import UltrathinkMiddleware
+
+        ultrathink_middleware = UltrathinkMiddleware(
+            budget_tokens=ultrathink_budget,
+            enabled_by_default=True,
+            interleaved_thinking=True,
+        )
+        agent_middleware.append(ultrathink_middleware)
+        all_tools.extend(ultrathink_middleware.get_tools())
+        logger.info("Ultrathink middleware enabled with %d token budget", ultrathink_budget)
+
     interrupt_on = _add_interrupt_on()
 
     agent = create_deep_agent(
         model=model,
         system_prompt=system_prompt,
-        tools=tools,
+        tools=all_tools,
         backend=composite_backend,
         middleware=agent_middleware,
         interrupt_on=interrupt_on,
@@ -431,6 +449,8 @@ async def create_agent_with_all_features(
     enable_mcp: bool = True,
     enable_hooks: bool = True,
     enable_plan_mode: bool = True,
+    enable_ultrathink: bool = False,
+    ultrathink_budget: int = 10000,
 ) -> tuple[Pregel, CompositeBackend]:
     """Create an agent with MCP, Hooks, and Plan Mode features enabled.
 
@@ -438,6 +458,7 @@ async def create_agent_with_all_features(
     - MCP middleware for Model Context Protocol servers
     - Hooks middleware for tool call validation and logging
     - Plan Mode middleware for structured planning workflow
+    - Ultrathink middleware for extended thinking (Claude 4+)
 
     Args:
         model: LLM model to use
@@ -448,6 +469,8 @@ async def create_agent_with_all_features(
         enable_mcp: Whether to enable MCP middleware (default: True)
         enable_hooks: Whether to enable Hooks middleware (default: True)
         enable_plan_mode: Whether to enable Plan Mode middleware (default: True)
+        enable_ultrathink: Whether to enable Ultrathink middleware (default: False)
+        ultrathink_budget: Token budget for extended thinking (default: 10000)
 
     Returns:
         2-tuple of graph and backend
@@ -465,6 +488,8 @@ async def create_agent_with_all_features(
             enable_mcp=True,
             enable_hooks=True,
             enable_plan_mode=True,
+            enable_ultrathink=True,  # Enable extended thinking
+            ultrathink_budget=15000,  # Token budget for thinking
         )
         ```
     """
@@ -485,6 +510,7 @@ async def create_agent_with_all_features(
     from deepagents.middleware.hooks import HooksMiddleware
     from deepagents.middleware.mcp import MCPMiddleware
     from deepagents.middleware.plan_mode import PlanModeMiddleware
+    from deepagents.middleware.ultrathink import UltrathinkMiddleware
 
     # Initialize MCP middleware if enabled
     mcp_middleware = None
@@ -522,6 +548,21 @@ async def create_agent_with_all_features(
             logger.info("Plan Mode middleware initialized")
         except Exception as e:
             logger.warning("Failed to initialize Plan Mode middleware: %s", e)
+
+    # Initialize Ultrathink middleware if enabled
+    ultrathink_middleware = None
+    if enable_ultrathink:
+        try:
+            ultrathink_middleware = UltrathinkMiddleware(
+                budget_tokens=ultrathink_budget,
+                enabled_by_default=True,
+                interleaved_thinking=True,
+            )
+            logger.info(
+                "Ultrathink middleware initialized with %d token budget", ultrathink_budget
+            )
+        except Exception as e:
+            logger.warning("Failed to initialize Ultrathink middleware: %s", e)
 
     # CONDITIONAL SETUP: Local vs Remote Sandbox
     if sandbox is None:
@@ -571,6 +612,9 @@ async def create_agent_with_all_features(
     if mcp_middleware:
         agent_middleware.append(mcp_middleware)
 
+    if ultrathink_middleware:
+        agent_middleware.append(ultrathink_middleware)
+
     # Get the system prompt
     system_prompt = get_system_prompt(assistant_id=assistant_id, sandbox_type=sandbox_type)
 
@@ -592,6 +636,11 @@ async def create_agent_with_all_features(
         plan_tools = plan_mode_middleware.get_tools()
         all_tools.extend(plan_tools)
         logger.info("Added %d Plan Mode tools", len(plan_tools))
+
+    if ultrathink_middleware:
+        ultrathink_tools = ultrathink_middleware.get_tools()
+        all_tools.extend(ultrathink_tools)
+        logger.info("Added %d Ultrathink tools", len(ultrathink_tools))
 
     interrupt_on = _add_interrupt_on()
 

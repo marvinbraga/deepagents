@@ -126,6 +126,17 @@ def parse_args():
         action="store_true",
         help="Disable the startup splash screen",
     )
+    parser.add_argument(
+        "--ultrathink",
+        action="store_true",
+        help="Enable extended thinking mode (Claude 4+ only)",
+    )
+    parser.add_argument(
+        "--ultrathink-budget",
+        type=int,
+        default=10000,
+        help="Token budget for extended thinking (default: 10000, range: 1024-128000)",
+    )
 
     return parser.parse_args()
 
@@ -275,6 +286,8 @@ async def _run_agent_session(
     sandbox_backend=None,
     sandbox_type: str | None = None,
     setup_script_path: str | None = None,
+    enable_ultrathink: bool = False,
+    ultrathink_budget: int = 10000,
 ) -> None:
     """Helper to create agent and run CLI session.
 
@@ -287,6 +300,8 @@ async def _run_agent_session(
         sandbox_backend: Optional sandbox backend for remote execution
         sandbox_type: Type of sandbox being used
         setup_script_path: Path to setup script that was run (if any)
+        enable_ultrathink: Whether to enable extended thinking mode
+        ultrathink_budget: Token budget for extended thinking
     """
     # Create agent with conditional tools
     tools = [http_request, fetch_url]
@@ -294,7 +309,13 @@ async def _run_agent_session(
         tools.append(web_search)
 
     agent, composite_backend = create_agent_with_config(
-        model, assistant_id, tools, sandbox=sandbox_backend, sandbox_type=sandbox_type
+        model,
+        assistant_id,
+        tools,
+        sandbox=sandbox_backend,
+        sandbox_type=sandbox_type,
+        enable_ultrathink=enable_ultrathink,
+        ultrathink_budget=ultrathink_budget,
     )
 
     # Calculate baseline token count for accurate token tracking
@@ -323,6 +344,8 @@ async def main(
     sandbox_type: str = "none",
     sandbox_id: str | None = None,
     setup_script_path: str | None = None,
+    enable_ultrathink: bool = False,
+    ultrathink_budget: int = 10000,
 ) -> None:
     """Main entry point with conditional sandbox support.
 
@@ -332,6 +355,8 @@ async def main(
         sandbox_type: Type of sandbox ("none", "modal", "runloop", "daytona")
         sandbox_id: Optional existing sandbox ID to reuse
         setup_script_path: Optional path to setup script to run in sandbox
+        enable_ultrathink: Whether to enable extended thinking mode
+        ultrathink_budget: Token budget for extended thinking
     """
     model = create_model()
 
@@ -353,6 +378,8 @@ async def main(
                     sandbox_backend,
                     sandbox_type=sandbox_type,
                     setup_script_path=setup_script_path,
+                    enable_ultrathink=enable_ultrathink,
+                    ultrathink_budget=ultrathink_budget,
                 )
         except (ImportError, ValueError, RuntimeError, NotImplementedError) as e:
             # Sandbox creation failed - fail hard (no silent fallback)
@@ -371,7 +398,14 @@ async def main(
     # Branch 2: User wants local mode (none or default)
     else:
         try:
-            await _run_agent_session(model, assistant_id, session_state, sandbox_backend=None)
+            await _run_agent_session(
+                model,
+                assistant_id,
+                session_state,
+                sandbox_backend=None,
+                enable_ultrathink=enable_ultrathink,
+                ultrathink_budget=ultrathink_budget,
+            )
         except KeyboardInterrupt:
             console.print("\n\n[yellow]Interrupted[/yellow]")
             sys.exit(0)
@@ -414,6 +448,8 @@ def cli_main() -> None:
                     args.sandbox,
                     args.sandbox_id,
                     args.sandbox_setup,
+                    enable_ultrathink=args.ultrathink,
+                    ultrathink_budget=args.ultrathink_budget,
                 )
             )
     except KeyboardInterrupt:

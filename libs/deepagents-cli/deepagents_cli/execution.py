@@ -32,6 +32,7 @@ from deepagents_cli.ui import (
     render_file_operation,
     render_todo_list,
 )
+from deepagents_cli.user_interaction import prompt_for_user_question
 
 _HITL_REQUEST_ADAPTER = TypeAdapter(HITLRequest)
 
@@ -533,8 +534,26 @@ async def execute_task(
                 any_rejected = False
 
                 for interrupt_id, hitl_request in pending_interrupts.items():
+                    # Check the request type for user questions
+                    request_type = hitl_request.get("type", "")
+
+                    if request_type in ("user_question", "confirm_action"):
+                        # Handle user questions - stop spinner
+                        if spinner_active:
+                            status.stop()
+                            spinner_active = False
+
+                        # Get user response
+                        response = prompt_for_user_question(hitl_request)
+
+                        # Store response for resumption
+                        hitl_response[interrupt_id] = {
+                            "type": "user_response",
+                            "response": response,
+                        }
+
                     # Check if auto-approve is enabled
-                    if session_state.auto_approve:
+                    elif session_state.auto_approve:
                         # Auto-approve all commands without prompting
                         decisions = []
                         for action_request in hitl_request["action_requests"]:

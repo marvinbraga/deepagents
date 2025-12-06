@@ -267,6 +267,8 @@ Every deep agent created with `create_deep_agent` comes with a standard set of t
 | `grep` | Search for text patterns within files | FilesystemMiddleware |
 | `execute`* | Run shell commands in a sandboxed environment | FilesystemMiddleware |
 | `task` | Delegate tasks to specialized sub-agents with isolated context windows | SubAgentMiddleware |
+| `ask_user_question` | Ask the user a question with optional predefined options | UserInteractionMiddleware |
+| `confirm_action` | Request user confirmation before performing an action | UserInteractionMiddleware |
 
 The `execute` tool is only available if the backend implements `SandboxBackendProtocol`. By default, it uses the in-memory state backend which does not support command execution. As shown, these tools (along with other capabilities) are provided by default middleware:
 
@@ -285,6 +287,7 @@ See the [agent harness documentation](https://docs.langchain.com/oss/python/deep
 | **AnthropicPromptCachingMiddleware** | Caches system prompts to reduce costs (Anthropic only) |
 | **PatchToolCallsMiddleware** | Fixes dangling tool calls from interruptions |
 | **HumanInTheLoopMiddleware** | Pauses execution for human approval (requires `interrupt_on` config) |
+| **UserInteractionMiddleware** | Interactive user dialogs with questions and confirmations |
 
 ## Built-in prompts
 
@@ -310,3 +313,72 @@ The middleware automatically adds instructions about the standard tools. Your cu
 - When to use sub-agents vs when NOT to use them
 - Guidance on parallel execution
 - Subagent lifecycle (spawn → run → return → reconcile)
+
+#### From [UserInteractionMiddleware](libs/deepagents/deepagents/middleware/user_interaction.py)
+
+- Explains `ask_user_question` tool for interactive dialogs
+- Explains `confirm_action` tool for user confirmations
+- When to ask questions vs when to proceed autonomously
+- Best practices for user interaction
+
+## User Interaction
+
+Deep agents can interact with users during execution using the `UserInteractionMiddleware`. This enables agents to ask clarifying questions and request confirmations before critical actions.
+
+### Asking Questions
+
+The `ask_user_question` tool allows agents to gather user preferences:
+
+```python
+from deepagents import create_deep_agent
+from deepagents.middleware import UserInteractionMiddleware
+
+agent = create_deep_agent(
+    middleware=[UserInteractionMiddleware()],
+    system_prompt="Always ask users for their preferences before making decisions.",
+)
+```
+
+The agent can then call `ask_user_question` with:
+
+```python
+# Example tool call structure (made by the agent)
+{
+    "question": "Which database would you prefer?",
+    "options": [
+        {"label": "PostgreSQL", "description": "Best for complex queries"},
+        {"label": "MongoDB", "description": "Great for flexible schemas"},
+        {"label": "SQLite", "description": "Simple and lightweight"}
+    ],
+    "header": "Database",
+    "multi_select": False,
+    "allow_other": True
+}
+```
+
+### Confirming Actions
+
+The `confirm_action` tool requests user approval before performing actions:
+
+```python
+# Example tool call structure (made by the agent)
+{
+    "action": "Delete all temporary files",
+    "details": "This will remove 47 files from /tmp/project/",
+    "severity": "high"  # "low", "medium", or "high"
+}
+```
+
+Severity levels affect the visual display:
+- **low**: Routine actions (default styling)
+- **medium**: State-modifying actions (yellow warning)
+- **high**: Critical/irreversible actions (red warning)
+
+### CLI Integration
+
+When using the `deepagents` CLI, user interactions are handled automatically with an interactive terminal UI:
+- Arrow keys to navigate options
+- Enter to select
+- Free-form text input when "Other" is allowed
+
+See [`examples/user_interaction_example.py`](libs/deepagents-cli/examples/user_interaction_example.py) for a complete example.
