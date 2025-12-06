@@ -150,6 +150,8 @@ async def simple_cli(
     sandbox_type: str | None = None,
     setup_script_path: str | None = None,
     no_splash: bool = False,
+    enable_ultrathink: bool = False,
+    ultrathink_budget: int = 10000,
 ) -> None:
     """Main CLI loop.
 
@@ -160,6 +162,8 @@ async def simple_cli(
         sandbox_id: ID of the active sandbox
         setup_script_path: Path to setup script that was run (if any)
         no_splash: If True, skip displaying the startup splash screen
+        enable_ultrathink: Whether extended thinking mode is enabled
+        ultrathink_budget: Token budget for extended thinking
     """
     console.clear()
     if not no_splash:
@@ -214,6 +218,12 @@ async def simple_cli(
     if session_state.auto_approve:
         console.print(
             "  [yellow]⚡ Auto-approve: ON[/yellow] [dim](tools run without confirmation)[/dim]"
+        )
+        console.print()
+
+    if enable_ultrathink:
+        console.print(
+            f"  [cyan]🧠 Ultrathink: ON[/cyan] [dim](budget: {ultrathink_budget:,} tokens)[/dim]"
         )
         console.print()
 
@@ -335,6 +345,8 @@ async def _run_agent_session(
         sandbox_type=sandbox_type,
         setup_script_path=setup_script_path,
         no_splash=session_state.no_splash,
+        enable_ultrathink=enable_ultrathink,
+        ultrathink_budget=ultrathink_budget,
     )
 
 

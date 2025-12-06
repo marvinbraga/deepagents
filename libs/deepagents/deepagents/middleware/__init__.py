@@ -6,6 +6,10 @@ from deepagents.middleware.mcp import MCPMiddleware
 from deepagents.middleware.plan_mode import PlanModeMiddleware
 from deepagents.middleware.subagents import CompiledSubAgent, SubAgent, SubAgentMiddleware
 from deepagents.middleware.ultrathink import UltrathinkMiddleware, UltrathinkState
+from deepagents.middleware.ultrathink_logging import (
+    configure_logging as configure_ultrathink_logging,
+    get_ultrathink_logger,
+)
 from deepagents.middleware.user_interaction import (
     UserInteractionMiddleware,
     UserQuestionRequest,
@@ -23,4 +27,6 @@ __all__ = [
     "UltrathinkState",
     "UserInteractionMiddleware",
     "UserQuestionRequest",
+    "configure_ultrathink_logging",
+    "get_ultrathink_logger",
 ]

@@ -97,24 +97,34 @@ class TestUltrathinkMiddlewareInit:
 class TestUltrathinkMiddlewareTools:
     """Tests for UltrathinkMiddleware tools."""
 
-    def test_get_tools_returns_two_tools(self):
-        """get_tools should return enable and disable tools."""
+    def test_get_tools_returns_control_tools(self):
+        """get_tools should always return enable and disable tools."""
         middleware = UltrathinkMiddleware()
         tools = middleware.get_tools()
 
-        assert len(tools) == 2
         tool_names = [t.name for t in tools]
         assert "enable_ultrathink" in tool_names
         assert "disable_ultrathink" in tool_names
 
-    def test_tools_are_cached(self):
-        """Tools should be cached after first call."""
+    def test_get_tools_includes_fallback_for_unknown_model(self):
+        """get_tools includes think_step_by_step when model is unknown (conservative)."""
+        middleware = UltrathinkMiddleware(fallback_mode="both")
+        # _current_model is None by default, so fallback is assumed
+        tools = middleware.get_tools()
+
+        tool_names = [t.name for t in tools]
+        assert "think_step_by_step" in tool_names
+
+    def test_control_tools_are_cached(self):
+        """Control tools should be cached after first call."""
         middleware = UltrathinkMiddleware()
 
         tools1 = middleware.get_tools()
         tools2 = middleware.get_tools()
 
-        assert tools1 is tools2
+        # Same tool instances (enable/disable are in _tools which is cached)
+        assert middleware._tools is not None
+        assert len(middleware._tools) == 2
 
     def test_tools_property(self):
         """tools property should return same as get_tools."""
@@ -247,7 +257,8 @@ class TestGetThinkingModel:
         middleware = UltrathinkMiddleware()
 
         mock_base_model = MagicMock()
-        mock_base_model.model_name = "claude-sonnet-4-5-20250929"
+        # ChatAnthropic uses 'model' attribute, not 'model_name'
+        mock_base_model.model = "claude-sonnet-4-5-20250929"
         mock_base_model.max_tokens = 16000
 
         with patch(
@@ -269,7 +280,7 @@ class TestGetThinkingModel:
         middleware = UltrathinkMiddleware(interleaved_thinking=True)
 
         mock_base_model = MagicMock()
-        mock_base_model.model_name = "claude-sonnet-4-5-20250929"
+        mock_base_model.model = "claude-sonnet-4-5-20250929"
         mock_base_model.max_tokens = 16000
 
         with patch(
@@ -289,7 +300,7 @@ class TestGetThinkingModel:
         middleware = UltrathinkMiddleware(interleaved_thinking=False)
 
         mock_base_model = MagicMock()
-        mock_base_model.model_name = "claude-sonnet-4-5-20250929"
+        mock_base_model.model = "claude-sonnet-4-5-20250929"
         mock_base_model.max_tokens = 16000
 
         with patch(
@@ -307,7 +318,7 @@ class TestGetThinkingModel:
         middleware = UltrathinkMiddleware()
 
         mock_base_model = MagicMock()
-        mock_base_model.model_name = "claude-sonnet-4-5-20250929"
+        mock_base_model.model = "claude-sonnet-4-5-20250929"
         mock_base_model.max_tokens = 16000
 
         with patch(
@@ -327,7 +338,7 @@ class TestGetThinkingModel:
         middleware = UltrathinkMiddleware()
 
         mock_base_model = MagicMock()
-        mock_base_model.model_name = "claude-sonnet-4-5-20250929"
+        mock_base_model.model = "claude-sonnet-4-5-20250929"
         mock_base_model.max_tokens = 16000
 
         with patch(
@@ -345,7 +356,7 @@ class TestGetThinkingModel:
         middleware = UltrathinkMiddleware()
 
         mock_base_model = MagicMock()
-        mock_base_model.model_name = "claude-sonnet-4-5-20250929"
+        mock_base_model.model = "claude-sonnet-4-5-20250929"
         mock_base_model.max_tokens = 16000
 
         with patch(
@@ -416,7 +427,7 @@ class TestWrapModelCall:
         from langchain_anthropic import ChatAnthropic
 
         mock_model = MagicMock(spec=ChatAnthropic)
-        mock_model.model_name = "claude-sonnet-4-5-20250929"
+        mock_model.model = "claude-sonnet-4-5-20250929"
         mock_model.max_tokens = 16000
 
         request = MagicMock()
@@ -448,7 +459,7 @@ class TestWrapModelCall:
         from langchain_anthropic import ChatAnthropic
 
         mock_model = MagicMock(spec=ChatAnthropic)
-        mock_model.model_name = "claude-sonnet-4-5-20250929"
+        mock_model.model = "claude-sonnet-4-5-20250929"
         mock_model.max_tokens = 16000
 
         request = MagicMock()
@@ -496,7 +507,7 @@ class TestAwrapModelCall:
         from langchain_anthropic import ChatAnthropic
 
         mock_model = MagicMock(spec=ChatAnthropic)
-        mock_model.model_name = "claude-sonnet-4-5-20250929"
+        mock_model.model = "claude-sonnet-4-5-20250929"
         mock_model.max_tokens = 16000
 
         request = MagicMock()
@@ -527,3 +538,310 @@ class TestStateSchema:
         """Middleware should have state_schema attribute."""
         assert hasattr(UltrathinkMiddleware, "state_schema")
         assert UltrathinkMiddleware.state_schema is UltrathinkMiddlewareState
+
+
+class TestFallbackMode:
+    """Tests for fallback_mode parameter."""
+
+    def test_default_fallback_mode_is_both(self):
+        """Default fallback_mode should be 'both'."""
+        middleware = UltrathinkMiddleware()
+        assert middleware.fallback_mode == "both"
+
+    def test_fallback_mode_tool_only(self):
+        """Should accept 'tool' fallback mode."""
+        middleware = UltrathinkMiddleware(fallback_mode="tool")
+        assert middleware.fallback_mode == "tool"
+
+    def test_fallback_mode_prompt_only(self):
+        """Should accept 'prompt' fallback mode."""
+        middleware = UltrathinkMiddleware(fallback_mode="prompt")
+        assert middleware.fallback_mode == "prompt"
+
+    def test_fallback_mode_both(self):
+        """Should accept 'both' fallback mode."""
+        middleware = UltrathinkMiddleware(fallback_mode="both")
+        assert middleware.fallback_mode == "both"
+
+
+class TestSupportsNativeThinking:
+    """Tests for _supports_native_thinking method."""
+
+    def test_returns_true_for_claude_4_opus(self):
+        """Should return True for Claude 4 Opus."""
+        from langchain_anthropic import ChatAnthropic
+
+        middleware = UltrathinkMiddleware()
+        model = ChatAnthropic(model_name="claude-opus-4-20250514")
+
+        assert middleware._supports_native_thinking(model) is True
+
+    def test_returns_true_for_claude_4_sonnet(self):
+        """Should return True for Claude 4 Sonnet."""
+        from langchain_anthropic import ChatAnthropic
+
+        middleware = UltrathinkMiddleware()
+        model = ChatAnthropic(model_name="claude-sonnet-4-20250514")
+
+        assert middleware._supports_native_thinking(model) is True
+
+    def test_returns_true_for_claude_4_haiku(self):
+        """Should return True for Claude 4 Haiku."""
+        from langchain_anthropic import ChatAnthropic
+
+        middleware = UltrathinkMiddleware()
+        model = ChatAnthropic(model_name="claude-haiku-4-5-20250929")
+
+        assert middleware._supports_native_thinking(model) is True
+
+    def test_returns_false_for_claude_3(self):
+        """Should return False for Claude 3 models (no extended thinking)."""
+        from langchain_anthropic import ChatAnthropic
+
+        middleware = UltrathinkMiddleware()
+        model = ChatAnthropic(model_name="claude-3-sonnet-20240229")
+
+        assert middleware._supports_native_thinking(model) is False
+
+    def test_returns_false_for_non_anthropic_model(self):
+        """Should return False for non-Anthropic models."""
+        middleware = UltrathinkMiddleware()
+        mock_model = MagicMock()  # Not a ChatAnthropic
+
+        assert middleware._supports_native_thinking(mock_model) is False
+
+    def test_returns_false_for_none(self):
+        """Should return False for None."""
+        middleware = UltrathinkMiddleware()
+
+        assert middleware._supports_native_thinking(None) is False
+
+
+class TestRequiresFallback:
+    """Tests for _requires_fallback method."""
+
+    def test_returns_true_for_none_model(self):
+        """Should return True when model is None (conservative default)."""
+        middleware = UltrathinkMiddleware()
+
+        assert middleware._requires_fallback(None) is True
+
+    def test_returns_false_for_claude_4(self):
+        """Should return False for Claude 4+ models."""
+        from langchain_anthropic import ChatAnthropic
+
+        middleware = UltrathinkMiddleware()
+        model = ChatAnthropic(model_name="claude-sonnet-4-20250514")
+
+        assert middleware._requires_fallback(model) is False
+
+    def test_returns_true_for_claude_3(self):
+        """Should return True for Claude 3 models."""
+        from langchain_anthropic import ChatAnthropic
+
+        middleware = UltrathinkMiddleware()
+        model = ChatAnthropic(model_name="claude-3-opus-20240229")
+
+        assert middleware._requires_fallback(model) is True
+
+    def test_returns_true_for_openai_model(self):
+        """Should return True for OpenAI models."""
+        middleware = UltrathinkMiddleware()
+
+        # Mock an OpenAI-like model
+        mock_model = MagicMock()
+        mock_model.model = "gpt-4-turbo"
+
+        assert middleware._requires_fallback(mock_model) is True
+
+
+class TestThinkStepByStepTool:
+    """Tests for the think_step_by_step fallback tool."""
+
+    def test_think_tool_is_created(self):
+        """Should create think_step_by_step tool."""
+        middleware = UltrathinkMiddleware()
+        tool = middleware._create_think_tool()
+
+        assert tool.name == "think_step_by_step"
+
+    def test_think_tool_has_correct_description(self):
+        """think_step_by_step tool should have descriptive docstring."""
+        middleware = UltrathinkMiddleware()
+        tool = middleware._create_think_tool()
+
+        assert "complex problem" in tool.description.lower()
+        assert "step by step" in tool.description.lower()
+
+    def test_think_tool_returns_formatted_response(self):
+        """think_step_by_step should return formatted reasoning summary."""
+        middleware = UltrathinkMiddleware()
+        tool = middleware._create_think_tool()
+
+        result = tool.invoke({
+            "problem": "Calculate 25 * 4",
+            "reasoning_steps": ["25 * 4 = 25 * 2 * 2", "= 50 * 2", "= 100"],
+            "conclusion": "The answer is 100",
+        })
+
+        assert "Problem: Calculate 25 * 4" in result
+        assert "1. 25 * 4 = 25 * 2 * 2" in result
+        assert "2. = 50 * 2" in result
+        assert "3. = 100" in result
+        assert "Conclusion: The answer is 100" in result
+        assert "You may now proceed" in result
+
+
+class TestGetToolsWithFallback:
+    """Tests for get_tools with fallback mode."""
+
+    def test_includes_think_tool_for_fallback_mode_tool(self):
+        """Should include think_step_by_step when fallback_mode='tool'."""
+        middleware = UltrathinkMiddleware(fallback_mode="tool")
+        # Simulate non-Claude model
+        middleware._current_model = MagicMock()
+
+        tools = middleware.get_tools()
+        tool_names = [t.name for t in tools]
+
+        assert "enable_ultrathink" in tool_names
+        assert "disable_ultrathink" in tool_names
+        assert "think_step_by_step" in tool_names
+
+    def test_includes_think_tool_for_fallback_mode_both(self):
+        """Should include think_step_by_step when fallback_mode='both'."""
+        middleware = UltrathinkMiddleware(fallback_mode="both")
+        # Simulate non-Claude model
+        middleware._current_model = MagicMock()
+
+        tools = middleware.get_tools()
+        tool_names = [t.name for t in tools]
+
+        assert "think_step_by_step" in tool_names
+
+    def test_no_think_tool_for_fallback_mode_prompt(self):
+        """Should NOT include think_step_by_step when fallback_mode='prompt'."""
+        middleware = UltrathinkMiddleware(fallback_mode="prompt")
+        # Simulate non-Claude model
+        middleware._current_model = MagicMock()
+
+        tools = middleware.get_tools()
+        tool_names = [t.name for t in tools]
+
+        assert "enable_ultrathink" in tool_names
+        assert "disable_ultrathink" in tool_names
+        assert "think_step_by_step" not in tool_names
+
+    def test_no_think_tool_for_claude_4(self):
+        """Should NOT include think_step_by_step for Claude 4+ models."""
+        from langchain_anthropic import ChatAnthropic
+
+        middleware = UltrathinkMiddleware(fallback_mode="both")
+        middleware._current_model = ChatAnthropic(model_name="claude-sonnet-4-20250514")
+
+        tools = middleware.get_tools()
+        tool_names = [t.name for t in tools]
+
+        assert "enable_ultrathink" in tool_names
+        assert "disable_ultrathink" in tool_names
+        assert "think_step_by_step" not in tool_names
+
+
+class TestGetSystemPromptAddition:
+    """Tests for get_system_prompt_addition method."""
+
+    def test_returns_instructions_for_fallback_mode_both(self):
+        """Should return thinking instructions when fallback_mode='both'."""
+        middleware = UltrathinkMiddleware(fallback_mode="both")
+        # Simulate non-Claude model
+        middleware._current_model = MagicMock()
+
+        prompt = middleware.get_system_prompt_addition()
+
+        assert "Extended Thinking Mode" in prompt
+        assert "think_step_by_step" in prompt
+        assert "ALWAYS use it for" in prompt
+
+    def test_returns_instructions_for_fallback_mode_prompt(self):
+        """Should return thinking instructions when fallback_mode='prompt'."""
+        middleware = UltrathinkMiddleware(fallback_mode="prompt")
+        # Simulate non-Claude model
+        middleware._current_model = MagicMock()
+
+        prompt = middleware.get_system_prompt_addition()
+
+        assert "Extended Thinking Mode" in prompt
+
+    def test_no_instructions_for_fallback_mode_tool(self):
+        """Should NOT return instructions when fallback_mode='tool'."""
+        middleware = UltrathinkMiddleware(fallback_mode="tool")
+        # Simulate non-Claude model
+        middleware._current_model = MagicMock()
+
+        prompt = middleware.get_system_prompt_addition()
+
+        assert prompt == ""
+
+    def test_no_instructions_for_claude_4(self):
+        """Should NOT return instructions for Claude 4+ models."""
+        from langchain_anthropic import ChatAnthropic
+
+        middleware = UltrathinkMiddleware(fallback_mode="both")
+        middleware._current_model = ChatAnthropic(model_name="claude-sonnet-4-20250514")
+
+        prompt = middleware.get_system_prompt_addition()
+
+        assert prompt == ""
+
+    def test_returns_instructions_for_claude_3(self):
+        """Should return instructions for Claude 3 models (no native thinking)."""
+        from langchain_anthropic import ChatAnthropic
+
+        middleware = UltrathinkMiddleware(fallback_mode="both")
+        middleware._current_model = ChatAnthropic(model_name="claude-3-sonnet-20240229")
+
+        prompt = middleware.get_system_prompt_addition()
+
+        assert "Extended Thinking Mode" in prompt
+
+
+class TestWrapModelCallFallback:
+    """Tests for wrap_model_call with fallback scenarios."""
+
+    def test_does_not_modify_non_claude_model(self):
+        """Should not try to add thinking to non-Claude models."""
+        middleware = UltrathinkMiddleware(enabled_by_default=True)
+
+        mock_model = MagicMock()  # Not a ChatAnthropic
+        mock_model.model = "gpt-4-turbo"
+
+        request = MagicMock()
+        request.runtime = MagicMock()
+        request.runtime.state = {"ultrathink_enabled": True}
+        request.model = mock_model
+
+        handler = MagicMock(return_value="response")
+
+        result = middleware.wrap_model_call(request, handler)
+
+        # Should NOT call override - non-Claude models don't support native thinking
+        request.override.assert_not_called()
+        handler.assert_called_once_with(request)
+        assert result == "response"
+
+    def test_tracks_current_model(self):
+        """Should track current model for tool generation."""
+        middleware = UltrathinkMiddleware()
+
+        mock_model = MagicMock()
+        mock_model.model = "gpt-4-turbo"
+
+        request = MagicMock()
+        request.runtime = None
+        request.model = mock_model
+
+        handler = MagicMock(return_value="response")
+
+        middleware.wrap_model_call(request, handler)
+
+        assert middleware._current_model is mock_model
