@@ -44,6 +44,7 @@ DEEP_AGENTS_ASCII = """
 COMMANDS = {
     "clear": "Clear screen and reset conversation",
     "help": "Show help information",
+    "init": "Initialize project with agent.md configuration file",
     "tokens": "Show token usage for current session",
     "sessions": "List recent sessions",
     "resume": "Resume a previous session (picker or by ID/name)",
