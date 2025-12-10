@@ -146,6 +146,23 @@ def parse_args():
         help="Token budget for extended thinking (default: 10000, range: 1024-128000)",
     )
 
+    # Session resumption arguments
+    parser.add_argument(
+        "--resume",
+        "-r",
+        nargs="?",
+        const="__picker__",
+        metavar="SESSION_ID",
+        help="Resume a previous session (interactive picker if no ID provided)",
+    )
+    parser.add_argument(
+        "--continue",
+        "-c",
+        dest="continue_session",
+        action="store_true",
+        help="Continue the most recent session automatically",
+    )
+
     return parser.parse_args()
 
 
@@ -162,6 +179,8 @@ async def simple_cli(
     ultrathink_budget: int = 10000,
     agent_name: str = "agent",
     command_registry=None,
+    session_manager=None,
+    session_id: str | None = None,
 ) -> None:
     """Main CLI loop.
 
@@ -176,6 +195,8 @@ async def simple_cli(
         ultrathink_budget: Token budget for extended thinking
         agent_name: Agent identifier for loading agent-specific commands
         command_registry: CommandRegistry instance for custom slash commands
+        session_manager: SessionManager for persistent session tracking
+        session_id: Current session ID for updating metadata
     """
     console.clear()
     if not no_splash:
@@ -263,6 +284,10 @@ async def simple_cli(
     token_tracker = TokenTracker()
     token_tracker.set_baseline(baseline_tokens)
 
+    # Track message count for session updates
+    message_count = 0
+    first_user_message = None
+
     while True:
         try:
             user_input = await session.prompt_async()
@@ -282,17 +307,20 @@ async def simple_cli(
 
         # Check for slash commands first
         if user_input.startswith("/"):
-            result = handle_command(user_input, agent, token_tracker, command_registry)
+            result = await handle_command(user_input, agent, token_tracker, command_registry)
             if result == "exit":
                 console.print("\nGoodbye!", style=COLORS["primary"])
                 break
-            # Check if result is a tuple (custom command with expanded prompt)
+            # Check if result is a tuple
             if isinstance(result, tuple) and len(result) == 2:
-                handled, expanded_prompt = result
-                if handled and expanded_prompt:
-                    # Execute expanded prompt as a task
+                signal, value = result
+                # Handle resume signal - return to restart with new session
+                if signal == "resume":
+                    return ("resume", value)
+                # Handle custom command with expanded prompt
+                if signal is True and value:
                     await execute_task(
-                        expanded_prompt,
+                        value,
                         agent,
                         assistant_id,
                         session_state,
@@ -314,9 +342,25 @@ async def simple_cli(
             console.print("\nGoodbye!", style=COLORS["primary"])
             break
 
+        # Update session tracking
+        message_count += 1
+        if first_user_message is None:
+            first_user_message = user_input[:100]  # Truncate for summary
+            # Update session summary with first message
+            if session_manager and session_id:
+                session_manager.update_session(
+                    session_id,
+                    summary=first_user_message,
+                    message_count=message_count,
+                )
+
         await execute_task(
             user_input, agent, assistant_id, session_state, token_tracker, backend=backend
         )
+
+        # Update message count periodically
+        if session_manager and session_id and message_count % 5 == 0:
+            session_manager.update_session(session_id, message_count=message_count)
 
 
 async def _run_agent_session(
@@ -328,10 +372,12 @@ async def _run_agent_session(
     setup_script_path: str | None = None,
     enable_ultrathink: bool = False,
     ultrathink_budget: int = 10000,
+    resume_session_id: str | None = None,
 ) -> None:
     """Helper to create agent and run CLI session.
 
     Extracted to avoid duplication between sandbox and local modes.
+    Supports session switching via /resume command.
 
     Args:
         model: LLM model to use
@@ -342,8 +388,12 @@ async def _run_agent_session(
         setup_script_path: Path to setup script that was run (if any)
         enable_ultrathink: Whether to enable extended thinking mode
         ultrathink_budget: Token budget for extended thinking
+        resume_session_id: Optional session ID to resume
     """
+    from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+
     from deepagents_cli.custom_commands import create_slash_command_tool
+    from deepagents_cli.sessions import create_session_manager
 
     # Create command registry for custom slash commands
     command_registry = create_command_registry(settings, assistant_id)
@@ -362,39 +412,96 @@ async def _run_agent_session(
     )
     tools.append(slash_command_tool)
 
-    agent, composite_backend = create_cli_agent(
-        model=model,
-        assistant_id=assistant_id,
-        tools=tools,
-        sandbox=sandbox_backend,
-        sandbox_type=sandbox_type,
-        auto_approve=session_state.auto_approve,
-        enable_ultrathink=enable_ultrathink,
-        ultrathink_budget=ultrathink_budget,
-    )
+    # Setup session management for persistence
+    session_mgr = create_session_manager()
 
-    # Calculate baseline token count for accurate token tracking
-    from .agent import get_system_prompt
-    from .token_utils import calculate_baseline_tokens
+    # Session loop - allows switching sessions via /resume
+    current_resume_id = resume_session_id
+    is_first_session = True
 
-    agent_dir = settings.get_agent_dir(assistant_id)
-    system_prompt = get_system_prompt(assistant_id=assistant_id, sandbox_type=sandbox_type)
-    baseline_tokens = calculate_baseline_tokens(model, agent_dir, system_prompt, assistant_id)
+    while True:
+        current_session_id = None
+        db_path = None
 
-    await simple_cli(
-        agent,
-        assistant_id,
-        session_state,
-        baseline_tokens,
-        backend=composite_backend,
-        sandbox_type=sandbox_type,
-        setup_script_path=setup_script_path,
-        no_splash=session_state.no_splash,
-        enable_ultrathink=enable_ultrathink,
-        ultrathink_budget=ultrathink_budget,
-        agent_name=assistant_id,
-        command_registry=command_registry,
-    )
+        if current_resume_id:
+            # Resume existing session
+            db_path = session_mgr.get_session_db_path_by_id(current_resume_id)
+            if db_path:
+                current_session_id = current_resume_id
+                session_state.thread_id = current_resume_id
+                # Show resume message
+                info = session_mgr.get_session_info(current_resume_id)
+                if info:
+                    console.print()
+                    console.print(
+                        f"[cyan]↩ Resuming session:[/cyan] {info.summary[:50]}..."
+                    )
+                    console.print(f"[dim]  ID: {current_session_id[:8]}... | "
+                                  f"{info.message_count} messages[/dim]")
+                    console.print()
+            else:
+                console.print(
+                    f"[yellow]Warning: Could not load session {current_resume_id}[/yellow]"
+                )
+
+        if not db_path:
+            # Create new persistent session
+            current_session_id, db_path = session_mgr.create_session(
+                agent_name=assistant_id,
+                project_path=project_root,
+            )
+            session_state.thread_id = current_session_id
+
+        # Use AsyncSqliteSaver as async context manager for persistent checkpointing
+        async with AsyncSqliteSaver.from_conn_string(str(db_path)) as checkpointer:
+            agent, composite_backend = create_cli_agent(
+                model=model,
+                assistant_id=assistant_id,
+                tools=tools,
+                sandbox=sandbox_backend,
+                sandbox_type=sandbox_type,
+                auto_approve=session_state.auto_approve,
+                enable_ultrathink=enable_ultrathink,
+                ultrathink_budget=ultrathink_budget,
+                checkpointer=checkpointer,
+            )
+
+            # Calculate baseline token count for accurate token tracking
+            from .agent import get_system_prompt
+            from .token_utils import calculate_baseline_tokens
+
+            agent_dir = settings.get_agent_dir(assistant_id)
+            system_prompt = get_system_prompt(assistant_id=assistant_id, sandbox_type=sandbox_type)
+            baseline_tokens = calculate_baseline_tokens(
+                model, agent_dir, system_prompt, assistant_id
+            )
+
+            # Run CLI and check for session switch signal
+            result = await simple_cli(
+                agent,
+                assistant_id,
+                session_state,
+                baseline_tokens,
+                backend=composite_backend,
+                sandbox_type=sandbox_type,
+                setup_script_path=setup_script_path if is_first_session else None,
+                no_splash=session_state.no_splash or not is_first_session,
+                enable_ultrathink=enable_ultrathink,
+                ultrathink_budget=ultrathink_budget,
+                agent_name=assistant_id,
+                command_registry=command_registry,
+                session_manager=session_mgr,
+                session_id=current_session_id,
+            )
+
+            # Check if we need to switch sessions
+            if isinstance(result, tuple) and result[0] == "resume":
+                current_resume_id = result[1]
+                is_first_session = False
+                continue  # Loop to start new session
+
+            # Normal exit
+            break
 
 
 async def main(
@@ -405,6 +512,7 @@ async def main(
     setup_script_path: str | None = None,
     enable_ultrathink: bool = False,
     ultrathink_budget: int = 10000,
+    resume_session_id: str | None = None,
 ) -> None:
     """Main entry point with conditional sandbox support.
 
@@ -416,6 +524,7 @@ async def main(
         setup_script_path: Optional path to setup script to run in sandbox
         enable_ultrathink: Whether to enable extended thinking mode
         ultrathink_budget: Token budget for extended thinking
+        resume_session_id: Optional session ID to resume
     """
     model = create_model()
 
@@ -439,6 +548,7 @@ async def main(
                     setup_script_path=setup_script_path,
                     enable_ultrathink=enable_ultrathink,
                     ultrathink_budget=ultrathink_budget,
+                    resume_session_id=resume_session_id,
                 )
         except (ImportError, ValueError, RuntimeError, NotImplementedError) as e:
             # Sandbox creation failed - fail hard (no silent fallback)
@@ -464,6 +574,7 @@ async def main(
                 sandbox_backend=None,
                 enable_ultrathink=enable_ultrathink,
                 ultrathink_budget=ultrathink_budget,
+                resume_session_id=resume_session_id,
             )
         except KeyboardInterrupt:
             console.print("\n\n[yellow]Interrupted[/yellow]")
@@ -501,6 +612,48 @@ def cli_main() -> None:
             # Create session state from args
             session_state = SessionState(auto_approve=args.auto_approve, no_splash=args.no_splash)
 
+            # Handle session resume/continue
+            resume_session_id = None
+            if args.continue_session:
+                # Continue most recent session
+                from deepagents_cli.sessions import create_session_manager
+
+                session_mgr = create_session_manager()
+                recent = session_mgr.get_most_recent_session(agent_name=args.agent)
+                if recent:
+                    resume_session_id = recent.session_id
+                    console.print(f"[dim]Continuing session: {recent.summary[:50]}...[/dim]")
+                else:
+                    console.print("[yellow]No previous session found. Starting new session.[/yellow]")
+
+            elif args.resume:
+                from deepagents_cli.sessions import create_session_manager
+                from deepagents_cli.sessions.picker import pick_session
+
+                session_mgr = create_session_manager()
+
+                if args.resume == "__picker__":
+                    # Interactive picker
+                    sessions = session_mgr.list_sessions(limit=20, agent_name=args.agent)
+                    if sessions:
+                        selected = pick_session(sessions)
+                        if selected:
+                            resume_session_id = selected.session_id
+                            console.print(f"[dim]Resuming: {selected.summary[:50]}...[/dim]")
+                        else:
+                            console.print("[yellow]No session selected. Starting new session.[/yellow]")
+                    else:
+                        console.print("[yellow]No previous sessions found. Starting new session.[/yellow]")
+                else:
+                    # Resume specific session by ID
+                    info = session_mgr.get_session_info(args.resume)
+                    if info:
+                        resume_session_id = args.resume
+                        console.print(f"[dim]Resuming: {info.summary[:50]}...[/dim]")
+                    else:
+                        console.print(f"[red]Session not found: {args.resume}[/red]")
+                        sys.exit(1)
+
             # API key validation happens in create_model()
             asyncio.run(
                 main(
@@ -511,6 +664,7 @@ def cli_main() -> None:
                     args.sandbox_setup,
                     enable_ultrathink=args.ultrathink,
                     ultrathink_budget=args.ultrathink_budget,
+                    resume_session_id=resume_session_id,
                 )
             )
     except KeyboardInterrupt:

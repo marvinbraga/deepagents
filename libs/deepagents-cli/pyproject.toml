@@ -20,6 +20,7 @@ dependencies = [
   "runloop-api-client>=0.69.0",
   "langchain-xai>=1.0.0",
   "pygame>=2.6.1",
+  "langgraph-checkpoint-sqlite>=3.0.1",
 ]
 
 [project.scripts]
@@ -64,7 +65,7 @@ requires = ["setuptools>=73.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["deepagents_cli", "deepagents_cli.hooks", "deepagents_cli.hooks.builtin", "deepagents_cli.mcp", "deepagents_cli.plan", "deepagents_cli.integrations", "deepagents_cli.models", "deepagents_cli.skills", "deepagents_cli.custom_commands"]
+packages = ["deepagents_cli", "deepagents_cli.hooks", "deepagents_cli.hooks.builtin", "deepagents_cli.mcp", "deepagents_cli.plan", "deepagents_cli.integrations", "deepagents_cli.models", "deepagents_cli.skills", "deepagents_cli.custom_commands", "deepagents_cli.sessions"]
 
 [tool.setuptools.package-data]
 deepagents_cli = ["default_agent_prompt.md"]

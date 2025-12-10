@@ -340,6 +340,7 @@ def create_cli_agent(
     enable_shell: bool = True,
     enable_ultrathink: bool = False,
     ultrathink_budget: int = 10000,
+    checkpointer=None,
 ) -> tuple[Pregel, CompositeBackend]:
     """Create a CLI-configured agent with flexible options.
 
@@ -486,7 +487,8 @@ def create_cli_agent(
         interrupt_on=interrupt_on,
     ).with_config(config)
 
-    agent.checkpointer = InMemorySaver()
+    # Use provided checkpointer or fall back to in-memory
+    agent.checkpointer = checkpointer if checkpointer else InMemorySaver()
 
     return agent, composite_backend
 
