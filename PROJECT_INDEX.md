@@ -15,19 +15,21 @@
 ```
 deepagents/
 ├── libs/
-│   ├── deepagents/          # Core library (v0.2.8)
+│   ├── deepagents/          # Core library (v0.3.0)
 │   ├── deepagents-cli/      # CLI application (v0.0.10)
 │   └── harbor/              # Harbor integration (v0.0.1)
 ├── docs/
+│   ├── design/              # Design documents
 │   └── plans/               # Implementation plans
-└── .claude/                 # Claude Code configuration
+├── CLAUDE.md                # Claude Code instructions
+└── README.md                # Main readme
 ```
 
 ---
 
 ## Package: deepagents (Core Library)
 
-**Version**: 0.2.8
+**Version**: 0.3.0
 **Path**: `libs/deepagents/deepagents/`
 **Description**: General purpose 'deep agent' with sub-agent spawning, todo list capabilities, and mock file system.
 
@@ -54,6 +56,7 @@ deepagents/
 | `__init__.py` | - | Exports all middleware classes |
 | `filesystem.py` | `FilesystemMiddleware` | File operations: ls, read_file, write_file, edit_file, glob, grep, execute |
 | `subagents.py` | `SubAgentMiddleware`, `SubAgent`, `CompiledSubAgent` | Task delegation to isolated sub-agents |
+| `web.py` | `WebMiddleware` | Web search (DuckDuckGo), fetch URL, deep research with LLM |
 | `plan_mode.py` | `PlanModeMiddleware` | Planning mode for complex tasks |
 | `hooks.py` | `HooksMiddleware` | Hook execution middleware |
 | `mcp.py` | `MCPMiddleware` | MCP server integration |
@@ -95,6 +98,13 @@ deepagents/
 | Module | Purpose |
 |--------|---------|
 | `types.py` | Planning type definitions |
+
+### Optional Dependencies
+
+```bash
+pip install deepagents[web]  # Web search (DuckDuckGo)
+pip install deepagents[all]  # All optional features
+```
 
 ---
 
@@ -168,6 +178,23 @@ deepagents/
 | `commands.py` | Skill commands |
 | `middleware.py` | Skill middleware |
 
+### Sessions (`sessions/`)
+
+| Module | Purpose |
+|--------|---------|
+| `manager.py` | Session management |
+| `picker.py` | Session picker UI |
+
+### Custom Commands (`custom_commands/`)
+
+| Module | Purpose |
+|--------|---------|
+| `load.py` | Command loading |
+| `registry.py` | Command registry |
+| `tool.py` | Command tools |
+| `handler.py` | Command handlers |
+| `cli_commands.py` | CLI command definitions |
+
 ### Plan (`plan/`)
 
 | Module | Purpose |
@@ -221,6 +248,9 @@ deepagents/
 | `grep` | Search text patterns | FilesystemMiddleware |
 | `execute`* | Run shell commands | FilesystemMiddleware |
 | `task` | Delegate to sub-agents | SubAgentMiddleware |
+| `web_search` | Search web via DuckDuckGo (no API key) | WebMiddleware |
+| `web_fetch` | Fetch URL content | WebMiddleware |
+| `deep_research` | Deep research with LLM synthesis | WebMiddleware |
 | `ask_user_question` | Interactive questions | UserInteractionMiddleware |
 | `confirm_action` | Request confirmations | UserInteractionMiddleware |
 | `enable_ultrathink` | Enable extended thinking | UltrathinkMiddleware |
@@ -248,12 +278,15 @@ class CustomMiddleware(AgentMiddleware):
 ### Agent Creation
 ```python
 from deepagents import create_deep_agent
-from deepagents.middleware import UltrathinkMiddleware
+from deepagents.middleware import UltrathinkMiddleware, WebMiddleware
 
 agent = create_deep_agent(
     model=ChatAnthropic(model_name="claude-sonnet-4-5-20250929"),
     tools=[custom_tool],
-    middleware=[UltrathinkMiddleware(budget_tokens=10000)],
+    middleware=[
+        UltrathinkMiddleware(budget_tokens=10000),
+        WebMiddleware(model=llm),  # Web search, fetch, research
+    ],
     system_prompt="Your custom instructions",
 )
 ```
@@ -270,21 +303,69 @@ agent = create_deep_agent(
 )
 ```
 
+### Web Search (DuckDuckGo - No API Key)
+```python
+from deepagents.middleware.web import web_search_sync, web_fetch_sync, deep_research_sync
+
+# Simple search
+results = web_search_sync("Python 3.13 features", max_results=5)
+
+# Fetch URL content
+content = web_fetch_sync("https://docs.python.org/3/")
+
+# Deep research with LLM synthesis
+from langchain_anthropic import ChatAnthropic
+llm = ChatAnthropic(model="claude-sonnet-4-20250514")
+report = deep_research_sync("Python async best practices", model=llm)
+```
+
 ---
 
 ## Test Structure
 
 ### deepagents tests (`libs/deepagents/tests/`)
-- `unit_tests/` - Unit tests
-  - `middleware/` - Middleware tests (test_ultrathink.py, etc.)
-  - `backends/` - Backend tests
-- `integration_tests/` - Integration tests (test_ultrathink.py, etc.)
+- `unit_tests/` - Unit tests (17 files)
+  - `middleware/` - Middleware tests (test_ultrathink.py, test_web.py, etc.)
+  - `backends/` - Backend tests (8 files)
+- `integration_tests/` - Integration tests (5 files)
 
 ### deepagents-cli tests (`libs/deepagents-cli/tests/`)
-- Unit and integration tests for CLI
+- Unit and integration tests for CLI (~20 files)
 
 ### harbor tests (`libs/harbor/tests/`)
 - `unit_tests/test_imports.py` - Import verification
+
+**Total test files**: ~51
+
+---
+
+## Development Commands
+
+```bash
+# libs/deepagents/
+uv sync --all-groups       # Install dependencies
+make test                  # Unit tests with coverage
+make integration_test      # Integration tests
+make lint                  # Ruff + mypy
+make format                # Auto-format
+
+# libs/deepagents-cli/
+uv sync --all-groups       # Install dependencies
+make test                  # Unit tests (socket-disabled)
+make test_integration      # Integration tests
+make lint                  # Lint check
+make format                # Auto-format
+uv run deepagents          # Run CLI
+
+# libs/harbor/
+uv sync                    # Install dependencies
+make test                  # Unit tests
+make run-terminal-bench-modal  # Modal benchmarks
+make run-terminal-bench-docker # Docker benchmarks
+
+# Run single test
+uv run pytest tests/unit_tests/test_file.py::test_function_name
+```
 
 ---
 
@@ -293,10 +374,14 @@ agent = create_deep_agent(
 | Path | Description |
 |------|-------------|
 | `README.md` | Main documentation |
+| `CLAUDE.md` | Claude Code instructions |
 | `docs/plans/` | Implementation plans |
+| `docs/design/` | Design documents |
+| `docs/DEEPAGENTS_VS_CLAUDE_CODE.md` | Feature comparison |
+| `libs/deepagents/README.md` | Core library docs |
 | `libs/deepagents/deepagents/mcp/README.md` | MCP documentation |
-| `libs/harbor/README.md` | Harbor documentation |
 | `libs/deepagents-cli/README.md` | CLI documentation |
+| `libs/harbor/README.md` | Harbor documentation |
 
 ---
 
@@ -307,9 +392,22 @@ agent = create_deep_agent(
 | `libs/deepagents/pyproject.toml` | Core library config |
 | `libs/deepagents-cli/pyproject.toml` | CLI config |
 | `libs/harbor/pyproject.toml` | Harbor config |
+| `.serena/project.yml` | Serena MCP config |
 | `.gitignore` | Git ignore rules |
 | `LICENSE` | MIT License |
 
 ---
 
-*Generated: 2025-12-06*
+## Code Style
+
+| Setting | Value |
+|---------|-------|
+| Formatter | ruff |
+| Line length | 150 (deepagents), 100 (CLI) |
+| Docstrings | Google-style |
+| Type hints | Required (mypy strict) |
+| Tests | pytest + pytest-asyncio |
+
+---
+
+*Generated: 2025-12-10*

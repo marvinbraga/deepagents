@@ -27,52 +27,59 @@ poetry add deepagents
 
 ## Usage
 
-(To run the example below, you will need to `pip install tavily-python`).
+To enable web search capabilities, install the optional web dependencies:
 
-Make sure to set `TAVILY_API_KEY` in your environment. You can generate one [here](https://www.tavily.com/).
+```bash
+pip install deepagents[web]
+# or
+pip install duckduckgo-search
+```
+
+**No API key required!** The WebMiddleware uses DuckDuckGo for web search.
 
 ```python
-import os
-from typing import Literal
-from tavily import TavilyClient
 from deepagents import create_deep_agent
-
-tavily_client = TavilyClient(api_key=os.environ["TAVILY_API_KEY"])
-
-# Web search tool
-def internet_search(
-    query: str,
-    max_results: int = 5,
-    topic: Literal["general", "news", "finance"] = "general",
-    include_raw_content: bool = False,
-):
-    """Run a web search"""
-    return tavily_client.search(
-        query,
-        max_results=max_results,
-        include_raw_content=include_raw_content,
-        topic=topic,
-    )
-
+from deepagents.middleware.web import WebMiddleware
 
 # System prompt to steer the agent to be an expert researcher
 research_instructions = """You are an expert researcher. Your job is to conduct thorough research, and then write a polished report.
 
-You have access to an internet search tool as your primary means of gathering information.
-
-## `internet_search`
-
-Use this to run an internet search for a given query. You can specify the max number of results to return, the topic, and whether raw content should be included.
+You have access to web search tools as your primary means of gathering information.
 """
 
-# Create the deep agent
+# Create the deep agent with web search capabilities
 agent = create_deep_agent(
-    tools=[internet_search],
+    middleware=[WebMiddleware()],
     system_prompt=research_instructions,
 )
 
 # Invoke the agent
 result = agent.invoke({"messages": [{"role": "user", "content": "What is langgraph?"}]})
+```
+
+### WebMiddleware Tools
+
+The `WebMiddleware` provides three tools:
+
+- **web_search**: Search the web using DuckDuckGo (no API key required)
+- **web_fetch**: Fetch and extract content from a specific URL
+- **deep_research**: Perform comprehensive research with multiple searches and LLM synthesis
+
+```python
+from langchain_anthropic import ChatAnthropic
+from deepagents import create_deep_agent
+from deepagents.middleware.web import WebMiddleware
+
+# With LLM for deep research synthesis
+llm = ChatAnthropic(model="claude-sonnet-4-20250514")
+agent = create_deep_agent(
+    middleware=[WebMiddleware(model=llm, region="br-pt")],  # Brazil region
+)
+
+# Without deep_research tool
+agent = create_deep_agent(
+    middleware=[WebMiddleware(include_deep_research=False)],
+)
 ```
 
 See [examples/research/research_agent.py](examples/research/research_agent.py) for a more complex example.
@@ -137,31 +144,27 @@ agent = create_deep_agent(
 Just like with tool-calling agents, you can provide a deep agent with a set of tools that it has access to.
 
 ```python
-import os
-from typing import Literal
-from tavily import TavilyClient
 from deepagents import create_deep_agent
-
-tavily_client = TavilyClient(api_key=os.environ["TAVILY_API_KEY"])
+from deepagents.middleware.web import web_search_sync
 
 def internet_search(
     query: str,
     max_results: int = 5,
-    topic: Literal["general", "news", "finance"] = "general",
-    include_raw_content: bool = False,
+    timelimit: str | None = None,
 ):
-    """Run a web search"""
-    return tavily_client.search(
+    """Run a web search using DuckDuckGo (no API key required)"""
+    return web_search_sync(
         query,
         max_results=max_results,
-        include_raw_content=include_raw_content,
-        topic=topic,
+        timelimit=timelimit,
     )
 
 agent = create_deep_agent(
     tools=[internet_search]
 )
 ```
+
+**Note:** For web search, it's recommended to use `WebMiddleware` instead of defining custom tools. See the [WebMiddleware](#webmiddleware) section below.
 
 ### `middleware`
 `create_deep_agent` is implemented with middleware that can be customized. You can provide additional middleware to extend functionality, add tools, or implement custom hooks. 
@@ -229,25 +232,19 @@ class CompiledSubAgent(TypedDict):
 #### Using SubAgent
 
 ```python
-import os
-from typing import Literal
-from tavily import TavilyClient
 from deepagents import create_deep_agent
-
-tavily_client = TavilyClient(api_key=os.environ["TAVILY_API_KEY"])
+from deepagents.middleware.web import web_search_sync
 
 def internet_search(
     query: str,
     max_results: int = 5,
-    topic: Literal["general", "news", "finance"] = "general",
-    include_raw_content: bool = False,
+    timelimit: str | None = None,
 ):
-    """Run a web search"""
-    return tavily_client.search(
+    """Run a web search using DuckDuckGo (no API key required)"""
+    return web_search_sync(
         query,
         max_results=max_results,
-        include_raw_content=include_raw_content,
-        topic=topic,
+        timelimit=timelimit,
     )
 
 research_subagent = {
@@ -452,6 +449,64 @@ agent = create_agent(
     ],
 )
 ```
+
+### WebMiddleware
+
+Web search and research capabilities are essential for agents that need to gather current information. The **WebMiddleware** provides tools for web search and deep research without requiring any API keys.
+
+```python
+from langchain.agents import create_agent
+from deepagents.middleware.web import WebMiddleware
+
+# Basic web search (no API key required!)
+agent = create_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    middleware=[WebMiddleware()],
+)
+```
+
+**WebMiddleware** provides three tools:
+
+- **web_search**: Search the web using DuckDuckGo
+- **web_fetch**: Fetch and extract content from URLs
+- **deep_research**: Comprehensive research with LLM synthesis (optional)
+
+```python
+from langchain_anthropic import ChatAnthropic
+from langchain.agents import create_agent
+from deepagents.middleware.web import WebMiddleware
+
+# With LLM for deep research synthesis
+llm = ChatAnthropic(model="claude-sonnet-4-20250514")
+agent = create_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    middleware=[
+        WebMiddleware(
+            model=llm,              # LLM for synthesizing research
+            region="br-pt",         # Brazil region for localized results
+            safesearch="moderate",  # Safe search level
+            include_deep_research=True,  # Include deep_research tool
+        )
+    ],
+)
+```
+
+You can also use the search functions directly:
+
+```python
+from deepagents.middleware.web import web_search_sync, web_fetch_sync, deep_research_sync
+
+# Simple web search
+results = web_search_sync("Python best practices 2025", max_results=5)
+
+# Fetch content from a URL
+page = web_fetch_sync("https://docs.python.org/3/")
+
+# Deep research (without LLM synthesis)
+report = deep_research_sync("What are the latest AI trends?", num_searches=3)
+```
+
+**Note:** The old `tavily_search` function is deprecated. Use `web_search_sync` instead, which uses DuckDuckGo and doesn't require an API key.
 
 ## Sync vs Async
 

@@ -21,6 +21,7 @@ dependencies = [
   "langchain-xai>=1.0.0",
   "pygame>=2.6.1",
   "langgraph-checkpoint-sqlite>=3.0.1",
+  "duckduckgo-search>=8.1.1",
 ]
 
 [project.scripts]

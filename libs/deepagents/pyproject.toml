@@ -13,6 +13,13 @@ dependencies = [
     "loguru>=0.7.0",
 ]
 
+[project.optional-dependencies]
+web = [
+    "duckduckgo-search>=8.0.0",
+]
+all = [
+    "duckduckgo-search>=8.0.0",
+]
 
 [project.urls]
 Homepage = "https://docs.langchain.com/oss/python/deepagents/overview"

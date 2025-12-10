@@ -14,6 +14,16 @@ from deepagents.middleware.user_interaction import (
     UserInteractionMiddleware,
     UserQuestionRequest,
 )
+from deepagents.middleware.web import (
+    WebMiddleware,
+    deep_research_async,
+    deep_research_sync,
+    tavily_search,
+    web_fetch_async,
+    web_fetch_sync,
+    web_search_async,
+    web_search_sync,
+)
 
 __all__ = [
     "CompiledSubAgent",
@@ -27,6 +37,14 @@ __all__ = [
     "UltrathinkState",
     "UserInteractionMiddleware",
     "UserQuestionRequest",
+    "WebMiddleware",
     "configure_ultrathink_logging",
+    "deep_research_async",
+    "deep_research_sync",
     "get_ultrathink_logger",
+    "tavily_search",
+    "web_fetch_async",
+    "web_fetch_sync",
+    "web_search_async",
+    "web_search_sync",
 ]
