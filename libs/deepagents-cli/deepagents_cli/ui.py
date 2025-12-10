@@ -488,14 +488,46 @@ def render_diff_block(diff: str, title: str) -> None:
         console.print()
 
 
-def show_interactive_help() -> None:
-    """Show available commands during interactive session."""
+def show_interactive_help(command_registry=None) -> None:
+    """Show available commands during interactive session.
+
+    Args:
+        command_registry: Optional CommandRegistry for custom commands.
+    """
     console.print()
     console.print("[bold]Interactive Commands:[/bold]", style=COLORS["primary"])
     console.print()
 
     for cmd, desc in COMMANDS.items():
         console.print(f"  /{cmd:<12} {desc}", style=COLORS["dim"])
+
+    # Show custom commands if registry is available
+    if command_registry:
+        custom_commands = command_registry.get_custom_commands_list()
+        if custom_commands:
+            console.print()
+            console.print("[bold]Custom Commands:[/bold]", style=COLORS["primary"])
+            console.print()
+
+            # Group by source
+            global_cmds = [c for c in custom_commands if c["source"] == "global"]
+            agent_cmds = [c for c in custom_commands if c["source"] == "agent"]
+            project_cmds = [c for c in custom_commands if c["source"] == "project"]
+
+            def _print_group(cmds, label, color):
+                if cmds:
+                    console.print(f"  [bold {color}]{label}:[/bold {color}]")
+                    for cmd in cmds:
+                        aliases = cmd.get("aliases", [])
+                        alias_str = f" ({', '.join(aliases)})" if aliases else ""
+                        console.print(
+                            f"    /{cmd['name']:<10} {cmd['description']}{alias_str}",
+                            style=COLORS["dim"],
+                        )
+
+            _print_group(global_cmds, "Global", "blue")
+            _print_group(agent_cmds, "Agent", "cyan")
+            _print_group(project_cmds, "Project", "green")
 
     console.print()
     console.print("[bold]Editing Features:[/bold]", style=COLORS["primary"])

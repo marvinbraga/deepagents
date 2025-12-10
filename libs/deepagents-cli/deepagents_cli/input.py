@@ -77,7 +77,19 @@ class FilePathCompleter(Completer):
 
 
 class CommandCompleter(Completer):
-    """Activate command completion only when line starts with '/'."""
+    """Activate command completion only when line starts with '/'.
+
+    Supports both built-in commands from COMMANDS dict and custom commands
+    from an optional CommandRegistry.
+    """
+
+    def __init__(self, command_registry=None) -> None:
+        """Initialize the command completer.
+
+        Args:
+            command_registry: Optional CommandRegistry for custom commands.
+        """
+        self._command_registry = command_registry
 
     def get_completions(self, document, _complete_event):
         """Get command completions when / is at the start."""
@@ -90,15 +102,30 @@ class CommandCompleter(Completer):
 
         command_fragment = m.group("command")
 
-        # Match commands that start with the fragment (case-insensitive)
+        # Match built-in commands that start with the fragment (case-insensitive)
         for cmd_name, cmd_desc in COMMANDS.items():
             if cmd_name.startswith(command_fragment.lower()):
                 yield Completion(
                     text=cmd_name,
-                    start_position=-len(command_fragment),  # Fixed position for original document
+                    start_position=-len(command_fragment),
                     display=cmd_name,
                     display_meta=cmd_desc,
                 )
+
+        # Match custom commands from registry (if available)
+        if self._command_registry:
+            all_custom = self._command_registry.get_all_commands()
+            for cmd_name, cmd_desc in all_custom.items():
+                # Skip if already shown as built-in
+                if cmd_name in COMMANDS:
+                    continue
+                if cmd_name.startswith(command_fragment.lower()):
+                    yield Completion(
+                        text=cmd_name,
+                        start_position=-len(command_fragment),
+                        display=cmd_name,
+                        display_meta=cmd_desc,
+                    )
 
 
 def parse_file_mentions(text: str) -> tuple[str, list[Path]]:
@@ -173,8 +200,16 @@ def get_bottom_toolbar(
     return toolbar
 
 
-def create_prompt_session(_assistant_id: str, session_state: SessionState) -> PromptSession:
-    """Create a configured PromptSession with all features."""
+def create_prompt_session(
+    _assistant_id: str, session_state: SessionState, command_registry=None
+) -> PromptSession:
+    """Create a configured PromptSession with all features.
+
+    Args:
+        _assistant_id: Agent identifier (currently unused).
+        session_state: Session state with auto-approve settings.
+        command_registry: Optional CommandRegistry for custom command completion.
+    """
     # Set default editor if not already set
     if "EDITOR" not in os.environ:
         os.environ["EDITOR"] = "nano"
@@ -304,7 +339,7 @@ def create_prompt_session(_assistant_id: str, session_state: SessionState) -> Pr
         message=HTML(f'<style fg="{COLORS["user"]}">></style> '),
         multiline=True,  # Keep multiline support but Enter submits
         key_bindings=kb,
-        completer=merge_completers([CommandCompleter(), FilePathCompleter()]),
+        completer=merge_completers([CommandCompleter(command_registry), FilePathCompleter()]),
         editing_mode=EditingMode.EMACS,
         complete_while_typing=True,  # Show completions as you type
         complete_in_thread=True,  # Async completion prevents menu freezing

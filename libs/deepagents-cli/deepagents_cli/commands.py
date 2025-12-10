@@ -1,26 +1,54 @@
 """Command handlers for slash commands and bash execution."""
 
+from __future__ import annotations
+
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from langgraph.checkpoint.memory import InMemorySaver
 
-from .config import COLORS, DEEP_AGENTS_ASCII, console
+from .config import COLORS, DEEP_AGENTS_ASCII, console, settings
 from .plan.commands import register_plan_commands
 from .ui import TokenTracker, show_interactive_help
+
+if TYPE_CHECKING:
+    from .custom_commands import CommandRegistry
 
 # Register plan commands
 PLAN_COMMANDS = register_plan_commands()
 
 
-def handle_command(command: str, agent, token_tracker: TokenTracker) -> str | bool:
-    """Handle slash commands. Returns 'exit' to exit, True if handled, False to pass to agent."""
-    cmd = command.lower().strip().lstrip("/")
+def handle_command(
+    command: str,
+    agent,
+    token_tracker: TokenTracker,
+    command_registry: "CommandRegistry | None" = None,
+) -> str | bool | tuple[bool, str]:
+    """Handle slash commands.
 
-    if cmd in ["quit", "exit", "q"]:
+    Args:
+        command: The command string (with leading slash).
+        agent: The agent instance.
+        token_tracker: Token usage tracker.
+        command_registry: Optional registry for custom commands.
+
+    Returns:
+        - 'exit' to exit the CLI
+        - True if command was handled (no further action needed)
+        - False to pass to agent (not used currently)
+        - (True, prompt) for custom commands that expand to a prompt
+    """
+    from .custom_commands import handle_custom_command, parse_command_line
+
+    # Parse command and arguments
+    cmd_name, cmd_args = parse_command_line(command)
+
+    # Built-in commands (highest priority)
+    if cmd_name in ["quit", "exit", "q"]:
         return "exit"
 
-    if cmd == "clear":
+    if cmd_name == "clear":
         # Reset agent conversation state
         agent.checkpointer = InMemorySaver()
 
@@ -37,21 +65,36 @@ def handle_command(command: str, agent, token_tracker: TokenTracker) -> str | bo
         console.print()
         return True
 
-    if cmd == "help":
-        show_interactive_help()
+    if cmd_name == "help":
+        show_interactive_help(command_registry=command_registry)
         return True
 
-    if cmd == "tokens":
+    if cmd_name == "tokens":
         token_tracker.display_session()
         return True
 
     # Check plan commands
-    if cmd in PLAN_COMMANDS:
-        handler = PLAN_COMMANDS[cmd]
+    if cmd_name in PLAN_COMMANDS:
+        handler = PLAN_COMMANDS[cmd_name]
         return handler(agent, console)
 
+    # Check custom commands
+    if command_registry:
+        handled, expanded_prompt = handle_custom_command(
+            command_name=cmd_name,
+            args=cmd_args,
+            registry=command_registry,
+            console=console,
+            project_root=str(settings.project_root) if settings.project_root else None,
+            cwd=str(Path.cwd()),
+        )
+        if handled:
+            if expanded_prompt:
+                return (True, expanded_prompt)
+            return True
+
     console.print()
-    console.print(f"[yellow]Unknown command: /{cmd}[/yellow]")
+    console.print(f"[yellow]Unknown command: /{cmd_name}[/yellow]")
     console.print("[dim]Type /help for available commands.[/dim]")
     console.print()
     return True

@@ -64,7 +64,7 @@ requires = ["setuptools>=73.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["deepagents_cli", "deepagents_cli.hooks", "deepagents_cli.hooks.builtin", "deepagents_cli.mcp", "deepagents_cli.plan", "deepagents_cli.integrations", "deepagents_cli.models", "deepagents_cli.skills"]
+packages = ["deepagents_cli", "deepagents_cli.hooks", "deepagents_cli.hooks.builtin", "deepagents_cli.mcp", "deepagents_cli.plan", "deepagents_cli.integrations", "deepagents_cli.models", "deepagents_cli.skills", "deepagents_cli.custom_commands"]
 
 [tool.setuptools.package-data]
 deepagents_cli = ["default_agent_prompt.md"]

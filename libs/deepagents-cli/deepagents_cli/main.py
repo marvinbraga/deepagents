@@ -18,6 +18,11 @@ from deepagents_cli.config import (
     create_model,
     settings,
 )
+from deepagents_cli.custom_commands import create_command_registry
+from deepagents_cli.custom_commands.cli_commands import (
+    execute_commands_command,
+    setup_commands_parser,
+)
 from deepagents_cli.execution import execute_task
 from deepagents_cli.input import create_prompt_session
 from deepagents_cli.integrations.sandbox_factory import (
@@ -96,6 +101,9 @@ def parse_args():
     # Skills command - setup delegated to skills module
     setup_skills_parser(subparsers)
 
+    # Commands command - setup delegated to custom_commands module
+    setup_commands_parser(subparsers)
+
     # Default interactive mode
     parser.add_argument(
         "--agent",
@@ -152,6 +160,8 @@ async def simple_cli(
     no_splash: bool = False,
     enable_ultrathink: bool = False,
     ultrathink_budget: int = 10000,
+    agent_name: str = "agent",
+    command_registry=None,
 ) -> None:
     """Main CLI loop.
 
@@ -164,6 +174,8 @@ async def simple_cli(
         no_splash: If True, skip displaying the startup splash screen
         enable_ultrathink: Whether extended thinking mode is enabled
         ultrathink_budget: Token budget for extended thinking
+        agent_name: Agent identifier for loading agent-specific commands
+        command_registry: CommandRegistry instance for custom slash commands
     """
     console.clear()
     if not no_splash:
@@ -242,8 +254,12 @@ async def simple_cli(
 
     console.print()
 
+    # Use provided command registry or create one if not provided
+    if command_registry is None:
+        command_registry = create_command_registry(settings, agent_name)
+
     # Create prompt session and token tracker
-    session = create_prompt_session(assistant_id, session_state)
+    session = create_prompt_session(assistant_id, session_state, command_registry)
     token_tracker = TokenTracker()
     token_tracker.set_baseline(baseline_tokens)
 
@@ -266,10 +282,24 @@ async def simple_cli(
 
         # Check for slash commands first
         if user_input.startswith("/"):
-            result = handle_command(user_input, agent, token_tracker)
+            result = handle_command(user_input, agent, token_tracker, command_registry)
             if result == "exit":
                 console.print("\nGoodbye!", style=COLORS["primary"])
                 break
+            # Check if result is a tuple (custom command with expanded prompt)
+            if isinstance(result, tuple) and len(result) == 2:
+                handled, expanded_prompt = result
+                if handled and expanded_prompt:
+                    # Execute expanded prompt as a task
+                    await execute_task(
+                        expanded_prompt,
+                        agent,
+                        assistant_id,
+                        session_state,
+                        token_tracker,
+                        backend=backend,
+                    )
+                continue
             if result:
                 # Command was handled, continue to next input
                 continue
@@ -313,10 +343,24 @@ async def _run_agent_session(
         enable_ultrathink: Whether to enable extended thinking mode
         ultrathink_budget: Token budget for extended thinking
     """
+    from deepagents_cli.custom_commands import create_slash_command_tool
+
+    # Create command registry for custom slash commands
+    command_registry = create_command_registry(settings, assistant_id)
+
     # Create agent with conditional tools
     tools = [http_request, fetch_url]
     if settings.has_tavily:
         tools.append(web_search)
+
+    # Add SlashCommandTool for programmatic command execution
+    project_root = str(settings.project_root) if settings.project_root else str(Path.cwd())
+    slash_command_tool = create_slash_command_tool(
+        registry=command_registry,
+        project_root=project_root,
+        cwd=str(Path.cwd()),
+    )
+    tools.append(slash_command_tool)
 
     agent, composite_backend = create_cli_agent(
         model=model,
@@ -348,6 +392,8 @@ async def _run_agent_session(
         no_splash=session_state.no_splash,
         enable_ultrathink=enable_ultrathink,
         ultrathink_budget=ultrathink_budget,
+        agent_name=assistant_id,
+        command_registry=command_registry,
     )
 
 
@@ -449,6 +495,8 @@ def cli_main() -> None:
             reset_agent(args.agent, args.source_agent)
         elif args.command == "skills":
             execute_skills_command(args)
+        elif args.command == "commands":
+            execute_commands_command(args)
         else:
             # Create session state from args
             session_state = SessionState(auto_approve=args.auto_approve, no_splash=args.no_splash)
