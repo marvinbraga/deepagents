@@ -338,9 +338,11 @@ def create_cli_agent(
     enable_memory: bool = True,
     enable_skills: bool = True,
     enable_shell: bool = True,
+    enable_mcp: bool = True,
     enable_ultrathink: bool = False,
     ultrathink_budget: int = 10000,
     checkpointer=None,
+    mcp_middleware=None,
 ) -> tuple[Pregel, CompositeBackend]:
     """Create a CLI-configured agent with flexible options.
 
@@ -362,9 +364,11 @@ def create_cli_agent(
         enable_memory: Enable AgentMemoryMiddleware for persistent memory
         enable_skills: Enable SkillsMiddleware for custom agent skills
         enable_shell: Enable ShellMiddleware for local shell execution (only in local mode)
+        enable_mcp: Enable MCP (Model Context Protocol) servers (default: True)
         sandbox_type: Type of sandbox provider ("modal", "runloop", "daytona")
         enable_ultrathink: Whether to enable Ultrathink middleware (default: False)
         ultrathink_budget: Token budget for extended thinking (default: 10000)
+        mcp_middleware: Pre-initialized MCP middleware instance (optional)
 
     Returns:
         2-tuple of (agent_graph, composite_backend)
@@ -461,8 +465,15 @@ def create_cli_agent(
     else:
         # Full HITL for destructive operations
         interrupt_on = _add_interrupt_on()
-    # Add Ultrathink middleware if enabled
+    # Add MCP middleware if enabled and provided
     all_tools = list(tools)
+    if enable_mcp and mcp_middleware:
+        agent_middleware.append(mcp_middleware)
+        mcp_tools = mcp_middleware.get_tools()
+        all_tools.extend(mcp_tools)
+        logger.info("MCP middleware added with %d tools", len(mcp_tools))
+
+    # Add Ultrathink middleware if enabled
     if enable_ultrathink:
         from deepagents.middleware.ultrathink import UltrathinkMiddleware
 
@@ -612,9 +623,7 @@ async def create_agent_with_all_features(
                 enabled_by_default=True,
                 interleaved_thinking=True,
             )
-            logger.info(
-                "Ultrathink middleware initialized with %d token budget", ultrathink_budget
-            )
+            logger.info("Ultrathink middleware initialized with %d token budget", ultrathink_budget)
         except Exception as e:
             logger.warning("Failed to initialize Ultrathink middleware: %s", e)
 

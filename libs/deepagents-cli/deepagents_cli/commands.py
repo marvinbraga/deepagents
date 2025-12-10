@@ -483,7 +483,7 @@ def _collect_project_context(project_root: Path, max_files: int = 15) -> str:
     return "\n".join(context_parts)
 
 
-INIT_LLM_PROMPT = '''You are analyzing a software project to create a configuration file for an AI coding assistant.
+INIT_LLM_PROMPT = """You are analyzing a software project to create a configuration file for an AI coding assistant.
 
 Based on the project information below, generate a comprehensive `agent.md` file in Markdown format.
 
@@ -508,7 +508,7 @@ Keep the content concise but informative. Use bullet points where appropriate.
 PROJECT INFORMATION:
 {project_context}
 
-Generate the agent.md content now (in Markdown format, starting with # Project Name):'''
+Generate the agent.md content now (in Markdown format, starting with # Project Name):"""
 
 
 async def _generate_agent_md_with_llm(project_root: Path) -> str | None:
@@ -540,16 +540,18 @@ async def _generate_agent_md_with_llm(project_root: Path) -> str | None:
     info = _detect_project_type(project_root)
     detection_summary = f"""
 ### Auto-detected Information
-- Project name: {info['name']}
-- Languages: {', '.join(info['languages'])}
-- Frameworks: {', '.join(info['frameworks']) if info['frameworks'] else 'None detected'}
-- Package manager: {info['package_manager'] or 'Unknown'}
-- Test command: {info['test_command'] or 'Unknown'}
-- Build command: {info['build_command'] or 'Unknown'}
-- Lint command: {info['lint_command'] or 'Unknown'}
+- Project name: {info["name"]}
+- Languages: {", ".join(info["languages"])}
+- Frameworks: {", ".join(info["frameworks"]) if info["frameworks"] else "None detected"}
+- Package manager: {info["package_manager"] or "Unknown"}
+- Test command: {info["test_command"] or "Unknown"}
+- Build command: {info["build_command"] or "Unknown"}
+- Lint command: {info["lint_command"] or "Unknown"}
 """
     if info.get("subprojects"):
-        detection_summary += f"- Subprojects: {', '.join(name for name, _ in info['subprojects'])}\n"
+        detection_summary += (
+            f"- Subprojects: {', '.join(name for name, _ in info['subprojects'])}\n"
+        )
 
     full_context = detection_summary + "\n" + project_context
 
@@ -800,6 +802,86 @@ async def _handle_resume_command_async(args: list[str]) -> tuple[str, str] | boo
     return True
 
 
+def _show_mcp_servers() -> None:
+    """Show list of configured MCP servers with real-time connection status."""
+    from deepagents_cli.mcp import MCPServerStatus, get_mcp_manager, load_mcp_config
+
+    console.print()
+    console.print("[bold cyan]MCP Servers[/bold cyan]")
+    console.print()
+
+    # Get manager for live status
+    manager = get_mcp_manager()
+
+    # If no manager, fall back to config-only display
+    if manager is None:
+        configs = load_mcp_config()
+        if not configs:
+            console.print("[dim]No MCP servers configured.[/dim]")
+            console.print()
+            console.print("[dim]To configure MCP servers, create:[/dim]")
+            console.print("[dim]  .deepagents/mcp_config.json (project-level)[/dim]")
+            console.print("[dim]  ~/.deepagents/mcp_config.json (user-level)[/dim]")
+            console.print()
+            console.print("[dim]Example config:[/dim]")
+            console.print(
+                '[dim]  {"servers": [{"name": "server-name", "command": "npx", '
+                '"args": ["-y", "@package/name"], "enabled": true}]}[/dim]'
+            )
+            console.print()
+            return
+
+        console.print(f"[dim]Found {len(configs)} server(s) in config[/dim]")
+        console.print("[yellow]⚠ MCP manager not initialized[/yellow]")
+        console.print()
+        for config in configs:
+            status_icon = "[dim]○[/dim]" if config.enabled else "[red]○[/red]"
+            console.print(f"  {status_icon} [cyan]{config.name}[/cyan] [dim](not started)[/dim]")
+        console.print()
+        return
+
+    # Show status summary
+    summary = manager.get_status_summary()
+    console.print(f"[dim]Status: {summary}[/dim]")
+    console.print()
+
+    # Show each server with real status
+    for name, server in manager.servers.items():
+        # Status icon and color
+        if server.status == MCPServerStatus.CONNECTED:
+            status_icon = "[green]●[/green]"
+            status_text = f"[green]connected[/green] ({server.tool_count} tools)"
+            if server.connect_time:
+                status_text += f" [dim]in {server.connect_time:.1f}s[/dim]"
+        elif server.status == MCPServerStatus.CONNECTING:
+            status_icon = "[yellow]◐[/yellow]"
+            status_text = "[yellow]connecting...[/yellow]"
+        elif server.status == MCPServerStatus.PENDING:
+            status_icon = "[dim]○[/dim]"
+            status_text = "[dim]pending[/dim]"
+        elif server.status == MCPServerStatus.ERROR:
+            status_icon = "[red]✗[/red]"
+            error_msg = server.error_message or "unknown error"
+            status_text = f"[red]error:[/red] [dim]{error_msg}[/dim]"
+        elif server.status == MCPServerStatus.DISABLED:
+            status_icon = "[dim]○[/dim]"
+            status_text = "[dim]disabled[/dim]"
+        else:
+            status_icon = "[dim]?[/dim]"
+            status_text = "[dim]unknown[/dim]"
+
+        console.print(f"  {status_icon} [cyan]{name}[/cyan]")
+        console.print(f"      {status_text}")
+
+        # Show command (truncated)
+        cmd_str = f"{server.config.command} {' '.join(server.config.args)}"
+        if len(cmd_str) > 55:
+            cmd_str = cmd_str[:52] + "..."
+        console.print(f"      [dim]{cmd_str}[/dim]")
+
+    console.print()
+
+
 def _show_sessions_list() -> None:
     """Show list of recent sessions."""
     from deepagents_cli.sessions import create_session_manager
@@ -909,6 +991,10 @@ async def handle_command(
 
     if cmd_name == "tokens":
         token_tracker.display_session()
+        return True
+
+    if cmd_name == "mcp":
+        _show_mcp_servers()
         return True
 
     if cmd_name == "resume":

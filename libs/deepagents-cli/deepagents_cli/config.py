@@ -49,6 +49,7 @@ COMMANDS = {
     "sessions": "List recent sessions",
     "resume": "Resume a previous session (picker or by ID/name)",
     "delete": "Delete a session by ID or name",
+    "mcp": "List configured MCP servers",
     "plan": "Show current plan (if in plan mode)",
     "approve": "Approve the current plan",
     "reject": "Reject the current plan",
@@ -128,7 +129,6 @@ class Settings:
     This class is initialized once at startup and provides access to:
     - Available models and API keys
     - Current project information
-    - Tool availability (e.g., Tavily)
     - File system paths
 
     Attributes:
@@ -136,14 +136,13 @@ class Settings:
 
         openai_api_key: OpenAI API key if available
         anthropic_api_key: Anthropic API key if available
-        tavily_api_key: Tavily API key if available
+        google_api_key: Google API key if available
     """
 
     # API keys
     openai_api_key: str | None
     anthropic_api_key: str | None
     google_api_key: str | None
-    tavily_api_key: str | None
 
     # Project information
     project_root: Path | None
@@ -162,7 +161,6 @@ class Settings:
         openai_key = os.environ.get("OPENAI_API_KEY")
         anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
         google_key = os.environ.get("GOOGLE_API_KEY")
-        tavily_key = os.environ.get("TAVILY_API_KEY")
 
         # Detect project
         project_root = _find_project_root(start_path)
@@ -171,7 +169,6 @@ class Settings:
             openai_api_key=openai_key,
             anthropic_api_key=anthropic_key,
             google_api_key=google_key,
-            tavily_api_key=tavily_key,
             project_root=project_root,
         )
 
@@ -189,11 +186,6 @@ class Settings:
     def has_google(self) -> bool:
         """Check if Google API key is configured."""
         return self.google_api_key is not None
-
-    @property
-    def has_tavily(self) -> bool:
-        """Check if Tavily API key is configured."""
-        return self.tavily_api_key is not None
 
     @property
     def has_project(self) -> bool:

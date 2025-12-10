@@ -2,9 +2,20 @@
 
 import argparse
 import asyncio
+import logging
 import os
 import sys
 from pathlib import Path
+
+# Suppress noisy MCP/SDK warnings during initialization
+logging.getLogger("root").setLevel(logging.CRITICAL)
+logging.getLogger("mcp").setLevel(logging.CRITICAL)
+logging.getLogger("deepagents.mcp").setLevel(logging.CRITICAL)
+logging.getLogger("httpx").setLevel(logging.CRITICAL)
+logging.getLogger("httpcore").setLevel(logging.CRITICAL)
+logging.getLogger("serena").setLevel(logging.CRITICAL)
+# Suppress all WARNING level logs by default
+logging.basicConfig(level=logging.CRITICAL)
 
 from deepagents.backends.protocol import SandboxBackendProtocol
 
@@ -53,10 +64,7 @@ def check_cli_dependencies() -> None:
     except ImportError:
         missing.append("python-dotenv")
 
-    try:
-        import tavily
-    except ImportError:
-        missing.append("tavily-python")
+    # duckduckgo-search is optional - web search will gracefully degrade if not installed
 
     try:
         import prompt_toolkit
@@ -224,17 +232,21 @@ async def simple_cli(
             )
         console.print()
 
-    if not settings.has_tavily:
+    # Check if web search is available (duckduckgo-search installed)
+    try:
+        from deepagents.middleware.web import web_search_sync  # noqa: F401
+
+        web_search_available = True
+    except ImportError:
+        web_search_available = False
+
+    if not web_search_available:
         console.print(
-            "[yellow]⚠ Web search disabled:[/yellow] TAVILY_API_KEY not found.",
+            "[yellow]⚠ Web search disabled:[/yellow] duckduckgo-search not installed.",
             style=COLORS["dim"],
         )
-        console.print("  To enable web search, set your Tavily API key:", style=COLORS["dim"])
-        console.print("    export TAVILY_API_KEY=your_api_key_here", style=COLORS["dim"])
-        console.print(
-            "  Or add it to your .env file. Get your key at: https://tavily.com",
-            style=COLORS["dim"],
-        )
+        console.print("  To enable web search (no API key required):", style=COLORS["dim"])
+        console.print("    pip install duckduckgo-search", style=COLORS["dim"])
         console.print()
 
     console.print("... Ready to code! What would you like to build?", style=COLORS["agent"])
@@ -398,10 +410,8 @@ async def _run_agent_session(
     # Create command registry for custom slash commands
     command_registry = create_command_registry(settings, assistant_id)
 
-    # Create agent with conditional tools
-    tools = [http_request, fetch_url]
-    if settings.has_tavily:
-        tools.append(web_search)
+    # Create agent with tools (web_search uses DuckDuckGo, no API key needed)
+    tools = [http_request, fetch_url, web_search]
 
     # Add SlashCommandTool for programmatic command execution
     project_root = str(settings.project_root) if settings.project_root else str(Path.cwd())
@@ -411,6 +421,29 @@ async def _run_agent_session(
         cwd=str(Path.cwd()),
     )
     tools.append(slash_command_tool)
+
+    # Initialize MCP servers asynchronously (non-blocking)
+    mcp_middleware = None
+    try:
+        from deepagents_cli.mcp import (
+            MCPManager,
+            load_mcp_config,
+            set_mcp_manager,
+        )
+
+        mcp_configs = load_mcp_config()
+        if mcp_configs:
+            enabled_count = sum(1 for c in mcp_configs if c.enabled)
+            if enabled_count > 0:
+                console.print(f"[dim]Starting {enabled_count} MCP server(s) in background...[/dim]")
+                manager = MCPManager.from_configs(mcp_configs)
+                set_mcp_manager(manager)
+                # Start async initialization - does not block
+                manager.start_async_init()
+    except ImportError:
+        pass  # MCP not available
+    except Exception as e:
+        console.print(f"[yellow]⚠ MCP setup error: {e}[/yellow]")
 
     # Setup session management for persistence
     session_mgr = create_session_manager()
@@ -433,11 +466,11 @@ async def _run_agent_session(
                 info = session_mgr.get_session_info(current_resume_id)
                 if info:
                     console.print()
+                    console.print(f"[cyan]↩ Resuming session:[/cyan] {info.summary[:50]}...")
                     console.print(
-                        f"[cyan]↩ Resuming session:[/cyan] {info.summary[:50]}..."
+                        f"[dim]  ID: {current_session_id[:8]}... | "
+                        f"{info.message_count} messages[/dim]"
                     )
-                    console.print(f"[dim]  ID: {current_session_id[:8]}... | "
-                                  f"{info.message_count} messages[/dim]")
                     console.print()
             else:
                 console.print(
@@ -461,9 +494,11 @@ async def _run_agent_session(
                 sandbox=sandbox_backend,
                 sandbox_type=sandbox_type,
                 auto_approve=session_state.auto_approve,
+                enable_mcp=mcp_middleware is not None,
                 enable_ultrathink=enable_ultrathink,
                 ultrathink_budget=ultrathink_budget,
                 checkpointer=checkpointer,
+                mcp_middleware=mcp_middleware,
             )
 
             # Calculate baseline token count for accurate token tracking
@@ -624,7 +659,9 @@ def cli_main() -> None:
                     resume_session_id = recent.session_id
                     console.print(f"[dim]Continuing session: {recent.summary[:50]}...[/dim]")
                 else:
-                    console.print("[yellow]No previous session found. Starting new session.[/yellow]")
+                    console.print(
+                        "[yellow]No previous session found. Starting new session.[/yellow]"
+                    )
 
             elif args.resume:
                 from deepagents_cli.sessions import create_session_manager
@@ -641,9 +678,13 @@ def cli_main() -> None:
                             resume_session_id = selected.session_id
                             console.print(f"[dim]Resuming: {selected.summary[:50]}...[/dim]")
                         else:
-                            console.print("[yellow]No session selected. Starting new session.[/yellow]")
+                            console.print(
+                                "[yellow]No session selected. Starting new session.[/yellow]"
+                            )
                     else:
-                        console.print("[yellow]No previous sessions found. Starting new session.[/yellow]")
+                        console.print(
+                            "[yellow]No previous sessions found. Starting new session.[/yellow]"
+                        )
                 else:
                     # Resume specific session by ID
                     info = session_mgr.get_session_info(args.resume)

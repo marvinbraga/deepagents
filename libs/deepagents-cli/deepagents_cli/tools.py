@@ -5,12 +5,6 @@ from typing import Any, Literal
 
 import requests
 from markdownify import markdownify
-from tavily import TavilyClient
-
-from deepagents_cli.config import settings
-
-# Initialize Tavily client if API key is available
-tavily_client = TavilyClient(api_key=settings.tavily_api_key) if settings.has_tavily else None
 
 
 def http_request(
@@ -91,19 +85,22 @@ def http_request(
 def web_search(
     query: str,
     max_results: int = 5,
-    topic: Literal["general", "news", "finance"] = "general",
-    include_raw_content: bool = False,
-):
-    """Search the web using Tavily for current information and documentation.
+    topic: Literal["general", "news"] = "general",
+    region: str = "wt-wt",
+    timelimit: str | None = None,
+) -> dict[str, Any]:
+    """Search the web using DuckDuckGo for current information and documentation.
 
-    This tool searches the web and returns relevant results. After receiving results,
-    you MUST synthesize the information into a natural, helpful response for the user.
+    This tool searches the web and returns relevant results. No API key required.
+    After receiving results, you MUST synthesize the information into a natural,
+    helpful response for the user.
 
     Args:
         query: The search query (be specific and detailed)
         max_results: Number of results to return (default: 5)
         topic: Search topic type - "general" for most queries, "news" for current events
-        include_raw_content: Include full page content (warning: uses more tokens)
+        region: Region for search results (default: "wt-wt" for worldwide)
+        timelimit: Time limit for results - "d" (day), "w" (week), "m" (month), "y" (year)
 
     Returns:
         Dictionary containing:
@@ -111,7 +108,6 @@ def web_search(
             - title: Page title
             - url: Page URL
             - content: Relevant excerpt from the page
-            - score: Relevance score (0-1)
         - query: The original search query
 
     IMPORTANT: After using this tool:
@@ -121,19 +117,32 @@ def web_search(
     4. Cite sources by mentioning the page titles or URLs
     5. NEVER show the raw JSON to the user - always provide a formatted response
     """
-    if tavily_client is None:
+    try:
+        from deepagents.middleware.web import web_search_sync
+
+        # Map topic to backend parameter
+        backend = "news" if topic == "news" else "text"
+
+        results = web_search_sync(
+            query=query,
+            max_results=max_results,
+            region=region,
+            timelimit=timelimit,
+            backend=backend,
+        )
+
         return {
-            "error": "Tavily API key not configured. Please set TAVILY_API_KEY environment variable.",
+            "results": results,
             "query": query,
         }
-
-    try:
-        return tavily_client.search(
-            query,
-            max_results=max_results,
-            include_raw_content=include_raw_content,
-            topic=topic,
-        )
+    except ImportError:
+        return {
+            "error": (
+                "Web search not available. Install with: pip install deepagents[web] "
+                "or pip install duckduckgo-search"
+            ),
+            "query": query,
+        }
     except Exception as e:
         return {"error": f"Web search error: {e!s}", "query": query}
 

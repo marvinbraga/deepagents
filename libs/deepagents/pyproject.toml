@@ -17,8 +17,12 @@ dependencies = [
 web = [
     "duckduckgo-search>=8.0.0",
 ]
+mcp = [
+    "mcp>=1.0.0",
+]
 all = [
     "duckduckgo-search>=8.0.0",
+    "mcp>=1.0.0",
 ]
 
 [project.urls]
