@@ -472,6 +472,10 @@ def create_cli_agent(
         mcp_tools = mcp_middleware.get_tools()
         all_tools.extend(mcp_tools)
         logger.info("MCP middleware added with %d tools", len(mcp_tools))
+        # Add MCP information to system prompt
+        mcp_prompt = mcp_middleware.get_system_prompt_addition()
+        if mcp_prompt:
+            system_prompt = f"{system_prompt}\n\n{mcp_prompt}"
 
     # Add Ultrathink middleware if enabled
     if enable_ultrathink:

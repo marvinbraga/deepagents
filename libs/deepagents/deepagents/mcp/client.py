@@ -1,8 +1,8 @@
 """MCP Client using the official Anthropic MCP SDK."""
 
 import logging
-import subprocess
-from typing import Any
+import os
+from typing import Any, TextIO
 
 from deepagents.mcp.protocol import MCPResource, MCPServerCapabilities, MCPServerConfig, MCPTool
 
@@ -31,6 +31,7 @@ class MCPClient:
         self._read_stream = None
         self._write_stream = None
         self._context_manager = None
+        self._devnull: TextIO | None = None
 
     @property
     def tools(self) -> list[MCPTool]:
@@ -62,16 +63,17 @@ class MCPClient:
             from mcp import ClientSession, StdioServerParameters
             from mcp.client.stdio import stdio_client
 
-            # Build server parameters - redirect stderr to suppress server logs
+            # Build server parameters
             server_params = StdioServerParameters(
                 command=self.config.command,
                 args=self.config.args,
                 env=self.config.env if self.config.env else None,
-                stderr=subprocess.DEVNULL,  # Suppress server stderr output
             )
 
-            # Create stdio client context manager
-            self._context_manager = stdio_client(server_params)
+            # Create stdio client context manager with suppressed stderr
+            # Open devnull to suppress server stderr output (sync open is fine for devnull)
+            self._devnull = open(os.devnull, "w")  # noqa: SIM115, PTH123, ASYNC230
+            self._context_manager = stdio_client(server_params, errlog=self._devnull)
 
             # Enter context manager to get streams
             self._read_stream, self._write_stream = await self._context_manager.__aenter__()
@@ -106,7 +108,8 @@ class MCPClient:
         except Exception as e:
             logger.exception("Failed to connect to MCP server %s", self.config.name)
             await self.disconnect()
-            raise RuntimeError(f"Failed to connect to MCP server {self.config.name}: {e}") from e
+            msg = f"Failed to connect to MCP server {self.config.name}: {e}"
+            raise RuntimeError(msg) from e
 
     async def disconnect(self) -> None:
         """Terminate the server process and clean up resources."""
@@ -119,7 +122,7 @@ class MCPClient:
         if self._session:
             try:
                 await self._session.__aexit__(None, None, None)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.debug("Error closing session: %s", e)
             self._session = None
 
@@ -127,16 +130,24 @@ class MCPClient:
         if self._context_manager:
             try:
                 await self._context_manager.__aexit__(None, None, None)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.debug("Error closing stdio client: %s", e)
             self._context_manager = None
 
         self._read_stream = None
         self._write_stream = None
 
+        # Close devnull file handle
+        if self._devnull:
+            import contextlib
+
+            with contextlib.suppress(Exception):
+                self._devnull.close()
+            self._devnull = None
+
         logger.info("Disconnected from MCP server: %s", self.config.name)
 
-    async def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> Any:
+    async def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> Any:  # noqa: ANN401
         """Call an MCP tool.
 
         Args:
@@ -156,15 +167,13 @@ class MCPClient:
         try:
             result = await self._session.call_tool(name, arguments or {})
             # Convert result content to list of dicts
-            return [
-                {"type": content.type, "text": getattr(content, "text", None)}
-                for content in result.content
-            ]
+            return [{"type": content.type, "text": getattr(content, "text", None)} for content in result.content]
         except Exception as e:
             logger.exception("Failed to call tool %s on server %s", name, self.config.name)
-            raise RuntimeError(f"Failed to call tool {name}: {e}") from e
+            msg = f"Failed to call tool {name}: {e}"
+            raise RuntimeError(msg) from e
 
-    async def read_resource(self, uri: str) -> Any:
+    async def read_resource(self, uri: str) -> Any:  # noqa: ANN401
         """Read an MCP resource.
 
         Args:
@@ -182,13 +191,11 @@ class MCPClient:
 
         try:
             result = await self._session.read_resource(uri)
-            return [
-                {"uri": content.uri, "text": getattr(content, "text", None)}
-                for content in result.contents
-            ]
+            return [{"uri": content.uri, "text": getattr(content, "text", None)} for content in result.contents]
         except Exception as e:
             logger.exception("Failed to read resource %s on server %s", uri, self.config.name)
-            raise RuntimeError(f"Failed to read resource {uri}: {e}") from e
+            msg = f"Failed to read resource {uri}: {e}"
+            raise RuntimeError(msg) from e
 
     async def _fetch_tools(self) -> None:
         """Fetch the list of available tools from the server."""
@@ -206,7 +213,7 @@ class MCPClient:
                 for tool in result.tools
             ]
             logger.debug("Fetched %d tools from server %s", len(self._tools), self.config.name)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning("Failed to fetch tools from server %s: %s", self.config.name, e)
             self._tools = []
 
@@ -227,6 +234,6 @@ class MCPClient:
                 for resource in result.resources
             ]
             logger.debug("Fetched %d resources from server %s", len(self._resources), self.config.name)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning("Failed to fetch resources from server %s: %s", self.config.name, e)
             self._resources = []

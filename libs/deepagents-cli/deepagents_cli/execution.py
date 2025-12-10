@@ -237,6 +237,12 @@ async def execute_task(
         "write_todos": "📋",
     }
 
+    def get_tool_icon(name: str) -> str:
+        """Get icon for a tool, handling MCP tools specially."""
+        if name.startswith("mcp__"):
+            return "●"  # MCP tools use bullet like Claude Code
+        return tool_icons.get(name, "🔧")
+
     file_op_tracker = FileOpTracker(assistant_id=assistant_id, backend=backend)
 
     # Track which tool calls we've displayed to avoid duplicates
@@ -503,7 +509,7 @@ async def execute_task(
                                 else:
                                     file_op_tracker.update_args(buffer_id, parsed_args)
                             tool_call_buffers.pop(buffer_key, None)
-                            icon = tool_icons.get(buffer_name, "🔧")
+                            icon = get_tool_icon(buffer_name)
 
                             if spinner_active:
                                 status.stop()

@@ -804,17 +804,17 @@ async def _handle_resume_command_async(args: list[str]) -> tuple[str, str] | boo
 
 def _show_mcp_servers() -> None:
     """Show list of configured MCP servers with real-time connection status."""
-    from deepagents_cli.mcp import MCPServerStatus, get_mcp_manager, load_mcp_config
+    from deepagents_cli.mcp import get_mcp_middleware, load_mcp_config
 
     console.print()
     console.print("[bold cyan]MCP Servers[/bold cyan]")
     console.print()
 
-    # Get manager for live status
-    manager = get_mcp_manager()
+    # Get middleware for live status
+    middleware = get_mcp_middleware()
 
-    # If no manager, fall back to config-only display
-    if manager is None:
+    # If no middleware, fall back to config-only display
+    if middleware is None:
         configs = load_mcp_config()
         if not configs:
             console.print("[dim]No MCP servers configured.[/dim]")
@@ -832,52 +832,48 @@ def _show_mcp_servers() -> None:
             return
 
         console.print(f"[dim]Found {len(configs)} server(s) in config[/dim]")
-        console.print("[yellow]⚠ MCP manager not initialized[/yellow]")
+        console.print("[yellow]⚠ MCP not initialized (no servers connected)[/yellow]")
         console.print()
         for config in configs:
             status_icon = "[dim]○[/dim]" if config.enabled else "[red]○[/red]"
-            console.print(f"  {status_icon} [cyan]{config.name}[/cyan] [dim](not started)[/dim]")
+            status_text = "[dim]enabled[/dim]" if config.enabled else "[red]disabled[/red]"
+            console.print(f"  {status_icon} [cyan]{config.name}[/cyan] ({status_text})")
         console.print()
         return
 
-    # Show status summary
-    summary = manager.get_status_summary()
-    console.print(f"[dim]Status: {summary}[/dim]")
+    # Show status from middleware
+    connected_count = len(middleware.clients)
+    total_tools = sum(len(c.tools) for c in middleware.clients.values())
+    total_resources = sum(len(c.resources) for c in middleware.clients.values())
+
+    console.print(f"[green]✓ {connected_count} server(s) connected[/green]")
+    console.print(f"[dim]  {total_tools} tools, {total_resources} resources available[/dim]")
     console.print()
 
-    # Show each server with real status
-    for name, server in manager.servers.items():
-        # Status icon and color
-        if server.status == MCPServerStatus.CONNECTED:
-            status_icon = "[green]●[/green]"
-            status_text = f"[green]connected[/green] ({server.tool_count} tools)"
-            if server.connect_time:
-                status_text += f" [dim]in {server.connect_time:.1f}s[/dim]"
-        elif server.status == MCPServerStatus.CONNECTING:
-            status_icon = "[yellow]◐[/yellow]"
-            status_text = "[yellow]connecting...[/yellow]"
-        elif server.status == MCPServerStatus.PENDING:
-            status_icon = "[dim]○[/dim]"
-            status_text = "[dim]pending[/dim]"
-        elif server.status == MCPServerStatus.ERROR:
-            status_icon = "[red]✗[/red]"
-            error_msg = server.error_message or "unknown error"
-            status_text = f"[red]error:[/red] [dim]{error_msg}[/dim]"
-        elif server.status == MCPServerStatus.DISABLED:
-            status_icon = "[dim]○[/dim]"
-            status_text = "[dim]disabled[/dim]"
-        else:
-            status_icon = "[dim]?[/dim]"
-            status_text = "[dim]unknown[/dim]"
-
-        console.print(f"  {status_icon} [cyan]{name}[/cyan]")
-        console.print(f"      {status_text}")
+    # Show each connected server
+    max_cmd_display = 55
+    max_tools_preview = 3
+    for name, client in middleware.clients.items():
+        tool_count = len(client.tools)
+        resource_count = len(client.resources)
+        console.print(f"  [green]●[/green] [cyan]{name}[/cyan]")
+        console.print(
+            f"      [green]connected[/green] ({tool_count} tools, {resource_count} resources)"
+        )
 
         # Show command (truncated)
-        cmd_str = f"{server.config.command} {' '.join(server.config.args)}"
-        if len(cmd_str) > 55:
-            cmd_str = cmd_str[:52] + "..."
+        cmd_str = f"{client.config.command} {' '.join(client.config.args)}"
+        if len(cmd_str) > max_cmd_display:
+            cmd_str = cmd_str[: max_cmd_display - 3] + "..."
         console.print(f"      [dim]{cmd_str}[/dim]")
+
+        # Show first few tools
+        if client.tools:
+            tool_names = [t["name"] for t in client.tools[:max_tools_preview]]
+            tools_str = ", ".join(tool_names)
+            if len(client.tools) > max_tools_preview:
+                tools_str += f", ... (+{len(client.tools) - max_tools_preview} more)"
+            console.print(f"      [dim]tools: {tools_str}[/dim]")
 
     console.print()
 

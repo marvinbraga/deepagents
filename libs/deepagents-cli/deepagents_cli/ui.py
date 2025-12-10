@@ -38,7 +38,26 @@ def format_tool_display(tool_name: str, tool_args: dict) -> str:
         read_file(path="/long/path/file.py") → "read_file(file.py)"
         web_search(query="how to code", max_results=5) → 'web_search("how to code")'
         shell(command="pip install foo") → 'shell("pip install foo")'
+        mcp__serena__get_symbols_overview → "serena - get_symbols_overview (MCP)"
     """
+    # Check for MCP tool pattern: mcp__server__tool_name
+    # Format: mcp__<server>__<tool> requires at least 3 parts
+    mcp_min_parts = 3
+    if tool_name.startswith("mcp__"):
+        parts = tool_name.split("__")
+        if len(parts) >= mcp_min_parts:
+            server_name = parts[1]
+            mcp_tool_name = "__".join(parts[2:])  # Handle tool names with underscores
+            # Format args for display
+            args_parts = []
+            for k, v in tool_args.items():
+                v_str = str(v) if not isinstance(v, str) else v
+                v_str = truncate_value(v_str, 40)
+                args_parts.append(f'{k}: "{v_str}"')
+            args_str = ", ".join(args_parts) if args_parts else ""
+            if args_str:
+                return f"{server_name} - {mcp_tool_name} (MCP)({args_str})"
+            return f"{server_name} - {mcp_tool_name} (MCP)"
 
     def abbreviate_path(path_str: str, max_length: int = 60) -> str:
         """Abbreviate a file path intelligently - show basename or relative path."""

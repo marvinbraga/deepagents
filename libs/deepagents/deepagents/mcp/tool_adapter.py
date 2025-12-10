@@ -12,11 +12,14 @@ from deepagents.mcp.protocol import MCPTool
 logger = logging.getLogger(__name__)
 
 
-def _json_schema_to_pydantic_field(name: str, schema: dict[str, Any]) -> tuple[type, Any]:
+def _json_schema_to_pydantic_field(
+    name: str,  # noqa: ARG001
+    schema: dict[str, Any],
+) -> tuple[type, Any]:
     """Convert a JSON Schema property to a Pydantic field type and default.
 
     Args:
-        name: The name of the field
+        name: The name of the field (reserved for future use)
         schema: The JSON Schema for this field
 
     Returns:
@@ -50,10 +53,7 @@ def _json_schema_to_pydantic_field(name: str, schema: dict[str, Any]) -> tuple[t
         pass
 
     # Create the Field with description and default
-    if default is ...:
-        field_info = Field(description=description)
-    else:
-        field_info = Field(default=default, description=description)
+    field_info = Field(description=description) if default is ... else Field(default=default, description=description)
 
     return (field_type, field_info)
 
@@ -130,19 +130,24 @@ class MCPToolWrapper(BaseTool):
         """
         # Create the input model from the JSON Schema
         input_schema = mcp_tool.get("inputSchema", {})
-        args_schema = _create_input_model_from_schema(mcp_tool["name"], input_schema)
+        original_name = mcp_tool["name"]
+        args_schema = _create_input_model_from_schema(original_name, input_schema)
+
+        # Use mcp__server__tool format for unique naming across servers
+        server_name = client.config.name
+        prefixed_name = f"mcp__{server_name}__{original_name}"
 
         # Initialize the BaseTool
         super().__init__(
             client=client,
-            tool_name=mcp_tool["name"],
-            name=mcp_tool["name"],
-            description=mcp_tool.get("description", f"MCP tool: {mcp_tool['name']}"),
+            tool_name=original_name,  # Keep original name for MCP calls
+            name=prefixed_name,  # Use prefixed name for LangChain
+            description=mcp_tool.get("description", f"MCP tool: {original_name}"),
             args_schema=args_schema,
             **kwargs,
         )
 
-    def _run(self, **kwargs: Any) -> Any:
+    def _run(self, **kwargs: Any) -> Any:  # noqa: ANN401
         """Synchronous run method (not supported for MCP tools).
 
         MCP tools are async-only, so this method raises an error.
@@ -156,7 +161,7 @@ class MCPToolWrapper(BaseTool):
         msg = "MCP tools are async-only. Use _arun instead."
         raise NotImplementedError(msg)
 
-    async def _arun(self, **kwargs: Any) -> Any:
+    async def _arun(self, **kwargs: Any) -> Any:  # noqa: ANN401
         """Execute the MCP tool asynchronously.
 
         Args:

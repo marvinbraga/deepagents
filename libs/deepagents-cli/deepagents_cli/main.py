@@ -7,15 +7,28 @@ import os
 import sys
 from pathlib import Path
 
-# Suppress noisy MCP/SDK warnings during initialization
-logging.getLogger("root").setLevel(logging.CRITICAL)
-logging.getLogger("mcp").setLevel(logging.CRITICAL)
-logging.getLogger("deepagents.mcp").setLevel(logging.CRITICAL)
-logging.getLogger("httpx").setLevel(logging.CRITICAL)
-logging.getLogger("httpcore").setLevel(logging.CRITICAL)
-logging.getLogger("serena").setLevel(logging.CRITICAL)
-# Suppress all WARNING level logs by default
-logging.basicConfig(level=logging.CRITICAL)
+# Configure logging to file only, clearing on each startup
+# ruff: noqa: E402
+_log_file = Path.home() / ".deepagents" / "deepagents.log"
+_log_file.parent.mkdir(parents=True, exist_ok=True)
+# Clear/truncate log file on startup
+_log_file.write_text("")
+# Configure logging to file only (no console output)
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.FileHandler(_log_file, mode="a", encoding="utf-8")],
+)
+# Suppress console output by removing any stream handlers and setting high level for root
+for handler in logging.root.handlers[:]:
+    if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler):
+        logging.root.removeHandler(handler)
+# Suppress specific noisy loggers from external libraries (serena, mcp, etc.)
+for _logger_name in ("serena", "mcp", "httpx", "httpcore", "uvicorn", "asyncio"):
+    _ext_logger = logging.getLogger(_logger_name)
+    _ext_logger.setLevel(logging.CRITICAL)
+    _ext_logger.handlers = []
+    _ext_logger.propagate = False
 
 from deepagents.backends.protocol import SandboxBackendProtocol
 
@@ -422,26 +435,39 @@ async def _run_agent_session(
     )
     tools.append(slash_command_tool)
 
-    # Initialize MCP servers asynchronously (non-blocking)
+    # Initialize MCP servers
     mcp_middleware = None
     try:
-        from deepagents_cli.mcp import (
-            MCPManager,
-            load_mcp_config,
-            set_mcp_manager,
-        )
+        from deepagents_cli.mcp import load_mcp_config, set_mcp_middleware
 
         mcp_configs = load_mcp_config()
         if mcp_configs:
-            enabled_count = sum(1 for c in mcp_configs if c.enabled)
-            if enabled_count > 0:
-                console.print(f"[dim]Starting {enabled_count} MCP server(s) in background...[/dim]")
-                manager = MCPManager.from_configs(mcp_configs)
-                set_mcp_manager(manager)
-                # Start async initialization - does not block
-                manager.start_async_init()
+            enabled_configs = [c for c in mcp_configs if c.enabled]
+            if enabled_configs:
+                console.print(f"[dim]Connecting to {len(enabled_configs)} MCP server(s)...[/dim]")
+                try:
+                    from deepagents.middleware.mcp import MCPMiddleware
+
+                    mcp_middleware = MCPMiddleware(servers=enabled_configs, auto_connect=False)
+                    await mcp_middleware.initialize()
+                    connected = len(mcp_middleware.clients)
+                    total_tools = sum(len(c.tools) for c in mcp_middleware.clients.values())
+                    if connected > 0:
+                        console.print(
+                            f"[dim]  ✓ {connected}/{len(enabled_configs)} servers connected, "
+                            f"{total_tools} tools available[/dim]"
+                        )
+                        # Store middleware globally for /mcp command
+                        set_mcp_middleware(mcp_middleware)
+                    else:
+                        console.print("[yellow]  ⚠ No MCP servers connected[/yellow]")
+                        mcp_middleware = None
+                except ImportError:
+                    console.print("[yellow]  ⚠ MCP SDK not installed (pip install mcp)[/yellow]")
+                except Exception as e:
+                    console.print(f"[yellow]  ⚠ MCP init error: {e}[/yellow]")
     except ImportError:
-        pass  # MCP not available
+        pass  # MCP config not available
     except Exception as e:
         console.print(f"[yellow]⚠ MCP setup error: {e}[/yellow]")
 

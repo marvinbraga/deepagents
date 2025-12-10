@@ -75,12 +75,12 @@ def _load_config_file(config_path: Path) -> list[MCPServerConfig]:
 
         if not isinstance(data, dict) or "servers" not in data:
             msg = f"Invalid MCP config file: {config_path}. Expected 'servers' key."
-            raise ValueError(msg)
+            raise ValueError(msg)  # noqa: TRY301
 
         servers = data["servers"]
         if not isinstance(servers, list):
             msg = f"Invalid MCP config file: {config_path}. 'servers' must be a list."
-            raise ValueError(msg)
+            raise TypeError(msg)  # noqa: TRY301
 
         configs = []
         for server_data in servers:
@@ -90,7 +90,9 @@ def _load_config_file(config_path: Path) -> list[MCPServerConfig]:
                 command = server_data.get("command")
 
                 if not name or not command:
-                    logger.warning("Skipping MCP server config without name or command: %s", server_data)
+                    logger.warning(
+                        "Skipping MCP server config without name or command: %s", server_data
+                    )
                     continue
 
                 # Create config with all fields
@@ -104,16 +106,16 @@ def _load_config_file(config_path: Path) -> list[MCPServerConfig]:
                 configs.append(config)
                 logger.debug("Loaded MCP server config: %s", name)
 
-            except Exception as e:
-                logger.exception("Error parsing MCP server config: %s", e)
+            except Exception:
+                logger.exception("Error parsing MCP server config")
                 continue
 
         logger.info("Loaded %d MCP server configs from %s", len(configs), config_path)
-        return configs
+        return configs  # noqa: TRY300
 
     except json.JSONDecodeError as e:
         msg = f"Invalid JSON in MCP config file {config_path}: {e}"
         raise ValueError(msg) from e
-    except Exception as e:
-        logger.exception("Error loading MCP config file %s: %s", config_path, e)
+    except Exception:
+        logger.exception("Error loading MCP config file %s", config_path)
         return []

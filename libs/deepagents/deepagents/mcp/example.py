@@ -1,3 +1,4 @@
+# ruff: noqa: T201, BLE001, S108, ERA001
 """Example usage of MCP integration with DeepAgents.
 
 This example demonstrates how to:
@@ -50,7 +51,7 @@ async def example_basic_usage() -> None:
 
         # List resources
         resources = middleware.list_resources()
-        print(f"\nAvailable resources:")
+        print("\nAvailable resources:")
         for server_name, server_resources in resources.items():
             print(f"  {server_name}: {len(server_resources)} resources")
 
@@ -122,12 +123,9 @@ async def example_with_deepagents() -> None:
         await mcp_middleware.initialize()
 
         # Create agent with MCP middleware
-        agent = create_deep_agent(
+        _agent = create_deep_agent(
             middleware=[mcp_middleware],
-            system_prompt=(
-                "You are a helpful assistant with access to MCP tools.\n\n"
-                + mcp_middleware.get_system_prompt_addition()
-            ),
+            system_prompt=("You are a helpful assistant with access to MCP tools.\n\n" + mcp_middleware.get_system_prompt_addition()),
         )
 
         print("Agent created successfully with MCP integration!")
