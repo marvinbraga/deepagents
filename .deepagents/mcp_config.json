@@ -1,0 +1,52 @@
+{
+  "servers": [
+    {
+      "name": "sequential-thinking",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "enabled": true
+    },
+    {
+      "name": "context7",
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"],
+      "enabled": true
+    },
+    {
+      "name": "magic",
+      "command": "npx",
+      "args": ["-y", "@21st-dev/magic"],
+      "enabled": true
+    },
+    {
+      "name": "playwright",
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"],
+      "enabled": true
+    },
+    {
+      "name": "serena",
+      "command": "uvx",
+      "args": [
+        "--from", "git+https://github.com/oraios/serena",
+        "serena", "start-mcp-server",
+        "--context", "ide-assistant",
+        "--enable-web-dashboard", "false",
+        "--enable-gui-log-window", "false"
+      ],
+      "enabled": true
+    },
+    {
+      "name": "morphllm-fast-apply",
+      "command": "npx",
+      "args": ["-y", "@morph-llm/morph-fast-apply"],
+      "enabled": true
+    },
+    {
+      "name": "chrome-devtools",
+      "command": "npx",
+      "args": ["-y", "chrome-devtools-mcp@latest"],
+      "enabled": true
+    }
+  ]
+}

@@ -1,413 +1,611 @@
-# Deep Agents - Project Index
+# Deep Agents - Project Documentation Index
 
-> Auto-generated repository documentation for AI agents
+> **Version:** 0.3.0 (deepagents) / 0.0.10 (deepagents-cli)
+> **Last Updated:** 2025-12-10
+> **Repository:** LangGraph-based agent framework for long-horizon AI tasks
+
+---
+
+## Quick Navigation
+
+| Section | Description |
+|---------|-------------|
+| [Overview](#overview) | Project introduction and key concepts |
+| [Architecture](#architecture) | System design and component relationships |
+| [Package Reference](#package-reference) | Detailed package documentation |
+| [API Reference](#api-reference) | Key functions and classes |
+| [Development Guide](#development-guide) | Setup, testing, and contribution |
+| [Configuration](#configuration) | Settings and customization |
+
+---
 
 ## Overview
 
-**Deep Agents** is a general-purpose agent harness built on LangGraph that implements common principles for long-horizon tasks including planning, computer access (shell and filesystem), and sub-agent delegation.
+**Deep Agents** is a LangGraph-based agent framework implementing three core patterns for long-horizon AI tasks:
 
-- **Repository**: `deepagents`
-- **Python Version**: >= 3.11
-- **Main Dependencies**: langchain, langchain-anthropic, langgraph
+1. **Planning** - Structured task decomposition before execution
+2. **Computer Access** - File system, shell, and web capabilities
+3. **Sub-agent Delegation** - Isolated context windows for parallel/complex work
+
+### Key Features
+
+- **Model Agnostic** - Works with Claude, GPT-4, Gemini, Grok via LangChain
+- **Middleware Architecture** - Extensible plugin system for tools and behaviors
+- **Pluggable Backends** - State, Filesystem, Store, Composite, Sandbox
+- **Progressive Disclosure** - Skills system loads capabilities on demand
+- **Human-in-the-Loop** - Configurable approval workflows
+- **Web Search** - DuckDuckGo integration (no API key required)
+- **Extended Thinking** - Ultrathink support for Claude 4+ with fallback
+
+---
 
 ## Architecture
 
 ```
+┌─────────────────────────────────────────────────────────────────┐
+│                         User Input                               │
+└─────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│            create_deep_agent() / create_cli_agent()              │
+└─────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     Middleware Stack                             │
+│  ┌─────────────┬─────────────┬──────────────┬────────────────┐  │
+│  │ TodoList    │ Filesystem  │ SubAgents    │ Summarization  │  │
+│  ├─────────────┼─────────────┼──────────────┼────────────────┤  │
+│  │ PlanMode    │ MCP         │ Hooks        │ Ultrathink     │  │
+│  ├─────────────┼─────────────┼──────────────┼────────────────┤  │
+│  │ Web         │ UserInteract│ Skills       │ PromptCache    │  │
+│  └─────────────┴─────────────┴──────────────┴────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                   LangGraph StateGraph                           │
+└─────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│         LLM (via ProviderRegistry)                               │
+│  ┌──────────┬──────────┬──────────┬──────────┐                  │
+│  │ Anthropic│ OpenAI   │ Google   │ XAI      │                  │
+│  │ (Claude) │ (GPT-4)  │ (Gemini) │ (Grok)   │                  │
+│  └──────────┴──────────┴──────────┴──────────┘                  │
+└─────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Backend Layer                                 │
+│  ┌──────────┬──────────┬──────────┬──────────┐                  │
+│  │ State    │ Filesystem│ Store   │ Sandbox  │                  │
+│  │ (memory) │ (disk)   │ (persist)│ (Modal/..)│                 │
+│  └──────────┴──────────┴──────────┴──────────┘                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Directory Structure
+
+```
 deepagents/
 ├── libs/
-│   ├── deepagents/          # Core library (v0.3.0)
-│   ├── deepagents-cli/      # CLI application (v0.0.10)
-│   └── harbor/              # Harbor integration (v0.0.1)
+│   ├── deepagents/              # Core library (v0.3.0)
+│   │   └── deepagents/
+│   │       ├── graph.py         # create_deep_agent()
+│   │       ├── middleware/      # Tool providers
+│   │       │   ├── filesystem.py
+│   │       │   ├── subagents.py
+│   │       │   ├── plan_mode.py
+│   │       │   ├── mcp.py
+│   │       │   ├── hooks.py
+│   │       │   ├── ultrathink.py
+│   │       │   ├── user_interaction.py
+│   │       │   └── web.py
+│   │       ├── backends/        # Storage providers
+│   │       │   ├── state.py
+│   │       │   ├── filesystem.py
+│   │       │   ├── store.py
+│   │       │   ├── composite.py
+│   │       │   └── sandbox.py
+│   │       ├── hooks/           # Event hooks
+│   │       └── mcp/             # MCP integration
+│   │
+│   ├── deepagents-cli/          # CLI application (v0.0.10)
+│   │   └── deepagents_cli/
+│   │       ├── main.py          # Entry point
+│   │       ├── agent.py         # Agent creation
+│   │       ├── tools.py         # CLI tools
+│   │       ├── skills/          # Progressive disclosure
+│   │       ├── sessions/        # Session management
+│   │       ├── custom_commands/ # Slash commands
+│   │       ├── models/          # Provider registry
+│   │       │   └── providers/   # Anthropic, OpenAI, Google, XAI
+│   │       └── integrations/    # Sandbox providers
+│   │
+│   └── harbor/                  # Benchmarking (v0.0.1)
+│       └── deepagents_harbor/
+│
 ├── docs/
-│   ├── design/              # Design documents
-│   └── plans/               # Implementation plans
-├── CLAUDE.md                # Claude Code instructions
-└── README.md                # Main readme
+│   └── DEEPAGENTS_VS_CLAUDE_CODE.md  # Feature comparison
+├── CLAUDE.md                    # Claude Code integration
+└── README.md                    # Main documentation
 ```
 
 ---
 
-## Package: deepagents (Core Library)
+## Package Reference
 
-**Version**: 0.3.0
-**Path**: `libs/deepagents/deepagents/`
-**Description**: General purpose 'deep agent' with sub-agent spawning, todo list capabilities, and mock file system.
+### deepagents (Core Library)
 
-### Entry Points
+**Location:** `libs/deepagents/`
+**Version:** 0.3.0
+**Python:** >=3.11
 
-| File | Purpose |
-|------|---------|
-| `__init__.py` | Package exports: `create_deep_agent`, `MCPClient`, `MCPServerConfig`, middleware classes |
-| `graph.py` | Main agent factory: `create_deep_agent()` with default model, tools, and middleware stack |
+#### Entry Point
 
-### Core Modules
-
-#### `graph.py` - Agent Factory
-- **`create_deep_agent()`**: Creates a configured deep agent with:
-  - Default model: `claude-sonnet-4-5-20250929`
-  - Built-in middleware: TodoList, Filesystem, SubAgent, Summarization, PromptCaching
-  - Configurable: model, tools, system_prompt, middleware, subagents, backend, etc.
-- **`get_default_model()`**: Returns default ChatAnthropic instance
-
-### Middleware (`middleware/`)
-
-| Module | Class | Purpose |
-|--------|-------|---------|
-| `__init__.py` | - | Exports all middleware classes |
-| `filesystem.py` | `FilesystemMiddleware` | File operations: ls, read_file, write_file, edit_file, glob, grep, execute |
-| `subagents.py` | `SubAgentMiddleware`, `SubAgent`, `CompiledSubAgent` | Task delegation to isolated sub-agents |
-| `web.py` | `WebMiddleware` | Web search (DuckDuckGo), fetch URL, deep research with LLM |
-| `plan_mode.py` | `PlanModeMiddleware` | Planning mode for complex tasks |
-| `hooks.py` | `HooksMiddleware` | Hook execution middleware |
-| `mcp.py` | `MCPMiddleware` | MCP server integration |
-| `ultrathink.py` | `UltrathinkMiddleware`, `UltrathinkState` | Extended thinking (Claude 4+) |
-| `user_interaction.py` | `UserInteractionMiddleware`, `UserQuestionRequest` | Interactive user dialogs |
-| `patch_tool_calls.py` | `PatchToolCallsMiddleware` | Fixes dangling tool calls |
-
-### Backends (`backends/`)
-
-| Module | Class | Purpose |
-|--------|-------|---------|
-| `protocol.py` | `BackendProtocol`, `BackendFactory`, `SandboxBackendProtocol` | Backend interfaces |
-| `state.py` | `StateBackend` | Ephemeral state storage (default) |
-| `filesystem.py` | `FilesystemBackend` | Real disk operations |
-| `store.py` | `StoreBackend` | Persistent storage (LangGraph Store) |
-| `composite.py` | `CompositeBackend` | Route paths to different backends |
-| `sandbox.py` | - | Sandbox execution support |
-| `utils.py` | - | Utility functions |
-
-### Hooks (`hooks/`)
-
-| Module | Class/Function | Purpose |
-|--------|----------------|---------|
-| `types.py` | `Hook`, `HookType`, `HookResult` | Hook type definitions |
-| `registry.py` | `HookRegistry` | Hook registration and management |
-| `executor.py` | `HookExecutor` | Hook execution logic |
-
-### MCP (`mcp/`)
-
-| Module | Class | Purpose |
-|--------|-------|---------|
-| `client.py` | `MCPClient` | MCP client implementation |
-| `protocol.py` | `MCPServerConfig` | MCP server configuration |
-| `tool_adapter.py` | - | MCP tool adaptation for LangChain |
-| `example.py` | - | Usage examples |
-
-### Plan (`plan/`)
-
-| Module | Purpose |
-|--------|---------|
-| `types.py` | Planning type definitions |
-
-### Optional Dependencies
-
-```bash
-pip install deepagents[web]  # Web search (DuckDuckGo)
-pip install deepagents[all]  # All optional features
-```
-
----
-
-## Package: deepagents-cli (CLI Application)
-
-**Version**: 0.0.10
-**Path**: `libs/deepagents-cli/deepagents_cli/`
-**Description**: Interactive AI coding assistant with skills, memory, and HITL workflows.
-
-### Entry Points
-
-| File | Purpose |
-|------|---------|
-| `__init__.py` | Exports `cli_main` |
-| `main.py` | CLI entry point |
-| `__main__.py` | Python -m support |
-
-### Core Modules
-
-| Module | Purpose |
-|--------|---------|
-| `agent.py` | Agent configuration and creation |
-| `config.py` | CLI configuration management |
-| `commands.py` | CLI command handlers |
-| `execution.py` | Agent execution loop |
-| `input.py` | User input handling |
-| `ui.py` | Terminal UI components |
-| `tools.py` | CLI-specific tools |
-| `shell.py` | Shell command execution |
-| `file_ops.py` | File operation utilities |
-| `project_utils.py` | Project detection utilities |
-| `token_utils.py` | Token counting utilities |
-| `agent_memory.py` | Agent memory management |
-| `user_interaction.py` | Interactive user dialogs |
-
-### Models (`models/`)
-
-| Module | Purpose |
-|--------|---------|
-| `base.py` | Base model interface |
-| `factory.py` | Model factory |
-| `registry.py` | Model registry |
-| `providers/anthropic.py` | Anthropic provider |
-| `providers/openai.py` | OpenAI provider |
-| `providers/google.py` | Google provider |
-| `providers/xai.py` | xAI (Grok) provider |
-
-### Integrations (`integrations/`)
-
-| Module | Purpose |
-|--------|---------|
-| `sandbox_factory.py` | Sandbox creation factory |
-| `daytona.py` | Daytona cloud integration |
-| `modal.py` | Modal cloud integration |
-| `runloop.py` | Runloop integration |
-| `error_codes.py` | Error code definitions |
-
-### Hooks (`hooks/`)
-
-| Module | Purpose |
-|--------|---------|
-| `loader.py` | Hook loader |
-| `builtin/security.py` | Security hooks |
-| `builtin/logging.py` | Logging hooks |
-
-### Skills (`skills/`)
-
-| Module | Purpose |
-|--------|---------|
-| `load.py` | Skill loading |
-| `commands.py` | Skill commands |
-| `middleware.py` | Skill middleware |
-
-### Sessions (`sessions/`)
-
-| Module | Purpose |
-|--------|---------|
-| `manager.py` | Session management |
-| `picker.py` | Session picker UI |
-
-### Custom Commands (`custom_commands/`)
-
-| Module | Purpose |
-|--------|---------|
-| `load.py` | Command loading |
-| `registry.py` | Command registry |
-| `tool.py` | Command tools |
-| `handler.py` | Command handlers |
-| `cli_commands.py` | CLI command definitions |
-
-### Plan (`plan/`)
-
-| Module | Purpose |
-|--------|---------|
-| `ui.py` | Planning UI |
-| `commands.py` | Planning commands |
-
-### MCP (`mcp/`)
-
-| Module | Purpose |
-|--------|---------|
-| `loader.py` | MCP server loader |
-
----
-
-## Package: deepagents-harbor (Harbor Integration)
-
-**Version**: 0.0.1
-**Path**: `libs/harbor/deepagents_harbor/`
-**Description**: Harbor integration with LangChain DeepAgents and LangSmith tracing.
-
-### Modules
-
-| Module | Purpose |
-|--------|---------|
-| `__init__.py` | Package exports |
-| `backend.py` | Harbor backend implementation |
-| `tracing.py` | LangSmith tracing integration |
-| `deepagents_wrapper.py` | DeepAgents wrapper for Harbor |
-
-### Scripts
-
-| Script | Purpose |
-|--------|---------|
-| `scripts/analyze.py` | Analysis utilities |
-| `scripts/harbor_langsmith.py` | LangSmith integration script |
-
----
-
-## Built-in Tools (via Middleware)
-
-| Tool | Description | Middleware |
-|------|-------------|------------|
-| `write_todos` | Create/manage task lists | TodoListMiddleware |
-| `read_todos` | Read current todo state | TodoListMiddleware |
-| `ls` | List directory contents | FilesystemMiddleware |
-| `read_file` | Read file with pagination | FilesystemMiddleware |
-| `write_file` | Create/overwrite file | FilesystemMiddleware |
-| `edit_file` | String replacements | FilesystemMiddleware |
-| `glob` | Find files by pattern | FilesystemMiddleware |
-| `grep` | Search text patterns | FilesystemMiddleware |
-| `execute`* | Run shell commands | FilesystemMiddleware |
-| `task` | Delegate to sub-agents | SubAgentMiddleware |
-| `web_search` | Search web via DuckDuckGo (no API key) | WebMiddleware |
-| `web_fetch` | Fetch URL content | WebMiddleware |
-| `deep_research` | Deep research with LLM synthesis | WebMiddleware |
-| `ask_user_question` | Interactive questions | UserInteractionMiddleware |
-| `confirm_action` | Request confirmations | UserInteractionMiddleware |
-| `enable_ultrathink` | Enable extended thinking | UltrathinkMiddleware |
-| `disable_ultrathink` | Disable extended thinking | UltrathinkMiddleware |
-
-*Requires SandboxBackendProtocol implementation
-
----
-
-## Key Patterns
-
-### Middleware Pattern
-```python
-from langchain.agents.middleware.types import AgentMiddleware, ModelRequest, ModelResponse
-
-class CustomMiddleware(AgentMiddleware):
-    state_schema = MyStateSchema  # Optional TypedDict for state
-    tools = [my_tool]  # Tools provided by middleware
-
-    def wrap_model_call(self, request: ModelRequest, handler) -> ModelResponse:
-        # Modify request, call handler, process response
-        return handler(request)
-```
-
-### Agent Creation
 ```python
 from deepagents import create_deep_agent
-from deepagents.middleware import UltrathinkMiddleware, WebMiddleware
 
 agent = create_deep_agent(
-    model=ChatAnthropic(model_name="claude-sonnet-4-5-20250929"),
-    tools=[custom_tool],
-    middleware=[
-        UltrathinkMiddleware(budget_tokens=10000),
-        WebMiddleware(model=llm),  # Web search, fetch, research
-    ],
-    system_prompt="Your custom instructions",
+    model="anthropic:claude-sonnet-4-20250514",
+    tools=[my_custom_tool],
+    system_prompt="Your task-specific instructions",
+    middleware=[MyMiddleware()],
+    subagents=[research_agent, analysis_agent],
+    backend=FilesystemBackend(root_dir="/project"),
+    interrupt_on={"execute": True},
+)
+
+result = agent.invoke({"messages": [{"role": "user", "content": "..."}]})
+```
+
+#### Middleware Reference
+
+| Middleware | Purpose | Tools Provided |
+|------------|---------|----------------|
+| `TodoListMiddleware` | Task tracking | `write_todos`, `read_todos` |
+| `FilesystemMiddleware` | File operations | `ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`, `execute` |
+| `SubAgentMiddleware` | Task delegation | `task` |
+| `PlanModeMiddleware` | Planning workflow | `enter_plan_mode`, `submit_plan`, `complete_plan_step`, `exit_plan_mode` |
+| `MCPMiddleware` | MCP protocol | Server-defined tools |
+| `HooksMiddleware` | Event hooks | - |
+| `UltrathinkMiddleware` | Extended thinking | `enable_ultrathink`, `disable_ultrathink` |
+| `UserInteractionMiddleware` | User dialogs | `ask_user_question`, `confirm_action` |
+| `WebMiddleware` | Web access | `web_search`, `web_fetch`, `deep_research` |
+| `SummarizationMiddleware` | Context management | - |
+| `AnthropicPromptCachingMiddleware` | Cost optimization | - |
+| `PatchToolCallsMiddleware` | Tool call fixes | - |
+
+#### Backend Reference
+
+| Backend | Description | Use Case |
+|---------|-------------|----------|
+| `StateBackend` | In-memory ephemeral | Default, single-session |
+| `FilesystemBackend` | Real disk operations | Local development |
+| `StoreBackend` | LangGraph Store | Cross-session persistence |
+| `CompositeBackend` | Path-based routing | Hybrid storage |
+| `SandboxBackendProtocol` | Sandboxed execution | Modal, Runloop, Daytona |
+
+#### Optional Dependencies
+
+```bash
+pip install deepagents[web]   # DuckDuckGo search
+pip install deepagents[mcp]   # MCP protocol
+pip install deepagents[all]   # All optional features
+```
+
+---
+
+### deepagents-cli (CLI Application)
+
+**Location:** `libs/deepagents-cli/`
+**Version:** 0.0.10
+**Python:** >=3.11
+
+#### Running the CLI
+
+```bash
+# Install
+pip install deepagents-cli
+
+# Run
+deepagents                      # Start interactive session
+deepagents --agent myagent      # Use specific agent
+deepagents --resume             # Resume last session
+deepagents --new                # Force new session
+```
+
+#### Module Reference
+
+| Module | Purpose |
+|--------|---------|
+| `main.py` | CLI entry point |
+| `agent.py` | `create_cli_agent()`, `create_agent_with_all_features()` |
+| `tools.py` | Web search, HTTP requests, fetch URL |
+| `config.py` | Configuration management |
+| `execution.py` | Agent execution loop |
+| `ui.py` | Terminal UI components |
+| `shell.py` | Shell command execution |
+| `user_interaction.py` | Interactive dialogs |
+| `agent_memory.py` | Memory management |
+| `token_utils.py` | Token counting |
+
+#### Configuration Hierarchy
+
+```
+~/.deepagents/                  # Global config
+    ├── agent.md                # Default agent prompt
+    ├── skills/                 # Global skills
+    └── commands/               # Global slash commands
+
+~/.deepagents/<agent>/          # Agent-specific
+    ├── agent.md
+    ├── skills/
+    └── commands/
+
+.deepagents/                    # Project-specific (in project root)
+    ├── agent.md
+    ├── skills/
+    └── commands/
+```
+
+#### Model Providers
+
+```python
+from deepagents_cli.models import create_model
+
+# Supported providers
+model = create_model("anthropic:claude-sonnet-4-20250514")
+model = create_model("openai:gpt-4o")
+model = create_model("google:gemini-2.0-flash")
+model = create_model("xai:grok-3")
+```
+
+#### Sessions
+
+| Module | Purpose |
+|--------|---------|
+| `sessions/manager.py` | Session CRUD (SQLite) |
+| `sessions/picker.py` | Interactive session picker |
+
+Sessions are linked to project path and git branch, with automatic cleanup.
+
+---
+
+### harbor (Benchmarking)
+
+**Location:** `libs/harbor/`
+**Version:** 0.0.1
+**Purpose:** Benchmark integration for agent evaluation
+
+```bash
+make run-terminal-bench-modal   # Run on Modal
+make run-terminal-bench-docker  # Run locally
+```
+
+| Module | Purpose |
+|--------|---------|
+| `backend.py` | Harbor backend |
+| `tracing.py` | LangSmith integration |
+| `deepagents_wrapper.py` | DeepAgents wrapper |
+
+---
+
+## API Reference
+
+### Core Functions
+
+#### `create_deep_agent()`
+
+```python
+def create_deep_agent(
+    model: str | BaseChatModel | None = None,
+    tools: Sequence[BaseTool | Callable | dict] | None = None,
+    *,
+    system_prompt: str | None = None,
+    middleware: Sequence[AgentMiddleware] = (),
+    subagents: list[SubAgent | CompiledSubAgent] | None = None,
+    response_format: ResponseFormat | None = None,
+    context_schema: type[Any] | None = None,
+    checkpointer: Checkpointer | None = None,
+    store: BaseStore | None = None,
+    backend: BackendProtocol | BackendFactory | None = None,
+    interrupt_on: dict[str, bool | InterruptOnConfig] | None = None,
+    debug: bool = False,
+    name: str | None = None,
+    cache: BaseCache | None = None,
+) -> CompiledStateGraph
+```
+
+**Default middleware stack:**
+- `TodoListMiddleware`
+- `FilesystemMiddleware`
+- `SubAgentMiddleware`
+- `SummarizationMiddleware` (170k tokens trigger)
+- `AnthropicPromptCachingMiddleware`
+- `PatchToolCallsMiddleware`
+
+### Built-in Tools
+
+| Tool | Parameters | Description |
+|------|------------|-------------|
+| `write_todos` | `todos: list[TodoItem]` | Create/update task list |
+| `read_todos` | - | Read current task list |
+| `ls` | `path: str` | List directory contents |
+| `read_file` | `path: str, offset?: int, limit?: int` | Read file with pagination |
+| `write_file` | `path: str, content: str` | Create/overwrite file |
+| `edit_file` | `path: str, old: str, new: str` | String replacement |
+| `glob` | `pattern: str` | Find files by pattern |
+| `grep` | `pattern: str, path?: str` | Search file contents |
+| `execute`* | `command: str` | Run shell command |
+| `task` | `agent: str, prompt: str` | Delegate to sub-agent |
+| `ask_user_question` | `question: str, options?: list` | Interactive question |
+| `confirm_action` | `action: str, severity: str` | Request confirmation |
+| `web_search` | `query: str, max_results?: int` | DuckDuckGo search |
+| `web_fetch` | `url: str` | Fetch URL content |
+| `deep_research` | `topic: str` | Multi-step LLM research |
+| `enable_ultrathink` | `budget_tokens?: int` | Enable extended thinking |
+| `disable_ultrathink` | - | Disable extended thinking |
+
+*Requires `SandboxBackendProtocol` implementation
+
+---
+
+## Development Guide
+
+### Prerequisites
+
+- Python 3.11+
+- `uv` package manager
+
+### Setup
+
+```bash
+# Clone repository
+git clone https://github.com/langchain-ai/deepagents.git
+cd deepagents
+
+# Install deepagents core
+cd libs/deepagents
+uv sync --all-groups
+
+# Install CLI
+cd ../deepagents-cli
+uv sync --all-groups
+```
+
+### Commands
+
+#### deepagents (core)
+
+```bash
+make test              # Unit tests with coverage
+make integration_test  # Integration tests
+make lint              # Ruff + mypy
+make format            # Auto-format
+```
+
+#### deepagents-cli
+
+```bash
+make test              # Unit tests (socket-disabled)
+make test_integration  # Integration tests
+make lint              # Lint check
+make format            # Auto-format
+uv run deepagents      # Run CLI
+```
+
+#### harbor
+
+```bash
+make test                       # Unit tests
+make run-terminal-bench-modal   # Modal benchmarks
+make run-terminal-bench-docker  # Docker benchmarks
+```
+
+### Running Single Tests
+
+```bash
+uv run pytest tests/unit_tests/test_file.py::test_function
+make test TEST_FILE=tests/unit_tests/test_specific.py
+```
+
+### Code Style
+
+| Setting | Value |
+|---------|-------|
+| Formatter | Ruff |
+| Line length | 150 (core), 100 (CLI) |
+| Docstrings | Google style |
+| Type hints | Required (mypy strict) |
+| Async tests | pytest-asyncio |
+
+---
+
+## Configuration
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `ANTHROPIC_API_KEY` | Anthropic API key |
+| `OPENAI_API_KEY` | OpenAI API key |
+| `GOOGLE_API_KEY` | Google AI API key |
+| `XAI_API_KEY` | xAI API key |
+| `TAVILY_API_KEY` | Tavily search (optional) |
+
+### Agent Configuration (`agent.md`)
+
+```markdown
+# Agent Name
+
+Instructions for your agent...
+
+## Skills
+- skill1: Description
+- skill2: Description
+
+## Memory Protocol
+1. Check `/memories/` at session start
+2. Save learnings to `/memories/[topic].md`
+```
+
+### Slash Commands
+
+```yaml
+---
+name: review
+description: Code review command
+aliases: [cr, check]
+args:
+  - name: target
+    description: Target file or directory
+    required: false
+    default: "."
+---
+Review the code in {target}...
+```
+
+---
+
+## Usage Examples
+
+### Basic Agent
+
+```python
+from deepagents import create_deep_agent
+
+agent = create_deep_agent(
+    system_prompt="You are a helpful coding assistant.",
+)
+result = agent.invoke({"messages": [{"role": "user", "content": "Hello!"}]})
+```
+
+### With Custom Tools
+
+```python
+from deepagents import create_deep_agent
+
+def weather(city: str) -> str:
+    """Get weather for a city."""
+    return f"Weather in {city}: Sunny"
+
+agent = create_deep_agent(tools=[weather])
+```
+
+### With Web Search
+
+```python
+from deepagents import create_deep_agent
+from deepagents.middleware import WebMiddleware
+from langchain_anthropic import ChatAnthropic
+
+llm = ChatAnthropic(model="claude-sonnet-4-20250514")
+agent = create_deep_agent(
+    middleware=[WebMiddleware(model=llm)],
 )
 ```
 
-### Backend Configuration
+### With Extended Thinking
+
 ```python
-from deepagents.backends import FilesystemBackend, CompositeBackend, StoreBackend
+from deepagents import create_deep_agent
+from deepagents.middleware import UltrathinkMiddleware
+
+agent = create_deep_agent(
+    middleware=[UltrathinkMiddleware(budget_tokens=10000)],
+)
+```
+
+### With Filesystem Backend
+
+```python
+from deepagents import create_deep_agent
+from deepagents.backends import FilesystemBackend
+
+agent = create_deep_agent(
+    backend=FilesystemBackend(root_dir="/path/to/project"),
+)
+```
+
+### With Memory Persistence
+
+```python
+from deepagents import create_deep_agent
+from deepagents.backends import CompositeBackend, StateBackend, StoreBackend
+from langgraph.store.memory import InMemoryStore
 
 agent = create_deep_agent(
     backend=CompositeBackend(
-        default=FilesystemBackend(root_dir="/project"),
+        default=StateBackend(),
         routes={"/memories/": StoreBackend(store=InMemoryStore())},
     ),
 )
 ```
 
-### Web Search (DuckDuckGo - No API Key)
+### With Sub-agents
+
 ```python
-from deepagents.middleware.web import web_search_sync, web_fetch_sync, deep_research_sync
+from deepagents import create_deep_agent
 
-# Simple search
-results = web_search_sync("Python 3.13 features", max_results=5)
+research_agent = {
+    "name": "researcher",
+    "description": "Researches topics in depth",
+    "prompt": "You are an expert researcher.",
+    "model": "openai:gpt-4o",
+}
 
-# Fetch URL content
-content = web_fetch_sync("https://docs.python.org/3/")
-
-# Deep research with LLM synthesis
-from langchain_anthropic import ChatAnthropic
-llm = ChatAnthropic(model="claude-sonnet-4-20250514")
-report = deep_research_sync("Python async best practices", model=llm)
+agent = create_deep_agent(subagents=[research_agent])
 ```
 
 ---
 
-## Test Structure
+## Cross-References
 
-### deepagents tests (`libs/deepagents/tests/`)
-- `unit_tests/` - Unit tests (17 files)
-  - `middleware/` - Middleware tests (test_ultrathink.py, test_web.py, etc.)
-  - `backends/` - Backend tests (8 files)
-- `integration_tests/` - Integration tests (5 files)
+### Internal Documentation
 
-### deepagents-cli tests (`libs/deepagents-cli/tests/`)
-- Unit and integration tests for CLI (~20 files)
+| Document | Description |
+|----------|-------------|
+| [README.md](README.md) | Project introduction |
+| [CLAUDE.md](CLAUDE.md) | Claude Code integration |
+| [docs/DEEPAGENTS_VS_CLAUDE_CODE.md](docs/DEEPAGENTS_VS_CLAUDE_CODE.md) | Feature comparison |
+| [libs/deepagents/README.md](libs/deepagents/README.md) | Core library docs |
+| [libs/deepagents-cli/README.md](libs/deepagents-cli/README.md) | CLI docs |
+| [libs/harbor/README.md](libs/harbor/README.md) | Benchmarking docs |
 
-### harbor tests (`libs/harbor/tests/`)
-- `unit_tests/test_imports.py` - Import verification
+### External Resources
 
-**Total test files**: ~51
-
----
-
-## Development Commands
-
-```bash
-# libs/deepagents/
-uv sync --all-groups       # Install dependencies
-make test                  # Unit tests with coverage
-make integration_test      # Integration tests
-make lint                  # Ruff + mypy
-make format                # Auto-format
-
-# libs/deepagents-cli/
-uv sync --all-groups       # Install dependencies
-make test                  # Unit tests (socket-disabled)
-make test_integration      # Integration tests
-make lint                  # Lint check
-make format                # Auto-format
-uv run deepagents          # Run CLI
-
-# libs/harbor/
-uv sync                    # Install dependencies
-make test                  # Unit tests
-make run-terminal-bench-modal  # Modal benchmarks
-make run-terminal-bench-docker # Docker benchmarks
-
-# Run single test
-uv run pytest tests/unit_tests/test_file.py::test_function_name
-```
+| Resource | URL |
+|----------|-----|
+| Documentation | https://docs.langchain.com/oss/python/deepagents/overview |
+| API Reference | https://reference.langchain.com/python/deepagents/ |
+| Quickstarts | https://github.com/langchain-ai/deepagents-quickstarts |
+| LangGraph | https://docs.langchain.com/oss/python/langgraph/overview |
 
 ---
 
-## Documentation
+## Feature Comparison with Claude Code
 
-| Path | Description |
-|------|-------------|
-| `README.md` | Main documentation |
-| `CLAUDE.md` | Claude Code instructions |
-| `docs/plans/` | Implementation plans |
-| `docs/design/` | Design documents |
-| `docs/DEEPAGENTS_VS_CLAUDE_CODE.md` | Feature comparison |
-| `libs/deepagents/README.md` | Core library docs |
-| `libs/deepagents/deepagents/mcp/README.md` | MCP documentation |
-| `libs/deepagents-cli/README.md` | CLI documentation |
-| `libs/harbor/README.md` | Harbor documentation |
+| Category | DeepAgents | Claude Code |
+|----------|------------|-------------|
+| Filesystem tools | 95% | Native |
+| Task management | 90% | Native |
+| Sub-agents | 85% (more flexible) | Native |
+| Plan mode | 80% | Native |
+| MCP integration | 90% | Native |
+| Memory/Persistence | 85% | Native |
+| Web tools | 95% | Native |
+| User interaction | 95% | Native |
+| Extended thinking | 95% | Native |
+| Slash commands | 95% | Native |
+| Model providers | 95% (multi-vendor) | Anthropic only |
+| Multimodal | 20% | Native |
 
----
-
-## Configuration Files
-
-| File | Purpose |
-|------|---------|
-| `libs/deepagents/pyproject.toml` | Core library config |
-| `libs/deepagents-cli/pyproject.toml` | CLI config |
-| `libs/harbor/pyproject.toml` | Harbor config |
-| `.serena/project.yml` | Serena MCP config |
-| `.gitignore` | Git ignore rules |
-| `LICENSE` | MIT License |
+See [docs/DEEPAGENTS_VS_CLAUDE_CODE.md](docs/DEEPAGENTS_VS_CLAUDE_CODE.md) for detailed comparison.
 
 ---
 
-## Code Style
-
-| Setting | Value |
-|---------|-------|
-| Formatter | ruff |
-| Line length | 150 (deepagents), 100 (CLI) |
-| Docstrings | Google-style |
-| Type hints | Required (mypy strict) |
-| Tests | pytest + pytest-asyncio |
-
----
-
-*Generated: 2025-12-10*
+*Generated with /sc:index command | 2025-12-10*
