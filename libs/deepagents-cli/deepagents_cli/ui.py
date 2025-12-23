@@ -278,7 +278,7 @@ def render_todo_list(todos: list[dict]) -> None:
     panel = Panel(
         "\n".join(lines),
         title="[bold]Task List[/bold]",
-        border_style="cyan",
+        border_style=COLORS["primary"],
         box=box.ROUNDED,
         padding=(0, 1),
     )
